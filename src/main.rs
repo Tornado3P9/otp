@@ -1,14 +1,15 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use clap::{Arg, ArgGroup, Command};
 use rand::Rng;
+use base64::prelude::*;
 
 fn main() -> io::Result<()> {
     let matches = Command::new("otp")
-        .version("1.0")
+        .version("1.1")
         .author("Tornado3P9")
-        .about("Encrypts or decrypts a file using One-Time-Pad (OTP)")
+        .about("Encrypts or decrypts a file using One-Time-Pad")
         .arg(Arg::new("encrypt")
             .short('e')
             .long("encrypt")
@@ -35,21 +36,28 @@ fn main() -> io::Result<()> {
         let key = generate_random_key(data_buffer.len());
         let ciphertext = xor_operation(&data_buffer, &key)?;
 
+        // // Just the binary data without base64-encoding:
+        // let mut cipher_file = File::create("cipher.txt")?;
+        // cipher_file.write_all(&ciphertext)?;
+        // let mut key_file = File::create("key.txt")?;
+        // key_file.write_all(&key)?;
+
+        // With base64-encoding:
+        let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
+        let base64_key: String = BASE64_STANDARD.encode(&key);
         let mut cipher_file = File::create("cipher.txt")?;
-        cipher_file.write_all(&ciphertext)?;
-
+        cipher_file.write_all(base64_cipher.as_bytes())?;
         let mut key_file = File::create("key.txt")?;
-        key_file.write_all(&key)?;
+        key_file.write_all(base64_key.as_bytes())?;
+
     } else if is_decrypt {
-        let mut cipher_file = File::open("cipher.txt")?;
-        let mut ciphertext = Vec::new();
-        cipher_file.read_to_end(&mut ciphertext)?;
+        let base64_cipher: String = fs::read_to_string("cipher.txt")?;
+        let binary_cipher: Vec<u8> = BASE64_STANDARD.decode(&base64_cipher).expect("Failed to decode base64_cipher data");
 
-        let mut key_file = File::open("key.txt")?;
-        let mut key = Vec::new();
-        key_file.read_to_end(&mut key)?;
+        let base64_key: String = fs::read_to_string("key.txt")?;
+        let binary_key: Vec<u8> = BASE64_STANDARD.decode(&base64_key).expect("Failed to decode base64_key data");
 
-        let plaintext = xor_operation(&ciphertext, &key)?;
+        let plaintext = xor_operation(&binary_cipher, &binary_key)?;
 
         let output_file_path = PathBuf::from(matches.get_one::<String>("decrypt").unwrap());
         
