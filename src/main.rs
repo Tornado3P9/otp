@@ -2,12 +2,13 @@ use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use clap::{Arg, ArgGroup, Command};
-use rand::Rng;
+use rand::rngs::OsRng;
+use rand::RngCore;
 use base64::prelude::*;
 
 fn main() -> io::Result<()> {
     let matches = Command::new("otp")
-        .version("1.1")
+        .version("1.2")
         .author("Tornado3P9")
         .about("Encrypts or decrypts a file using One-Time-Pad")
         .arg(Arg::new("encrypt")
@@ -71,9 +72,18 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
+// // A pseudo-random number generator (PRNG)
+// fn generate_random_key(length: usize) -> Vec<u8> {
+//     let mut rng = rand::thread_rng();
+//     (0..length).map(|_| rng.gen()).collect()
+// }
+
+// A cryptographically secure random number generator (CSPRNG)
 fn generate_random_key(length: usize) -> Vec<u8> {
-    let mut rng = rand::thread_rng();
-    (0..length).map(|_| rng.gen()).collect()
+    let mut rng = OsRng;
+    let mut key = vec![0u8; length];
+    rng.fill_bytes(&mut key);
+    key
 }
 
 fn xor_operation(text: &[u8], key: &[u8]) -> io::Result<Vec<u8>> {
