@@ -64,7 +64,6 @@ fn main() -> io::Result<()> {
         key_file.write_all(base64_key.as_bytes())?;
 
     } else if is_ewp {
-        println!("Hello world");
         let data_file_path = PathBuf::from(matches.get_one::<String>("ewp").unwrap());
         let mut data_file = File::open(&data_file_path)?;
         let mut data_buffer = Vec::new();
@@ -141,7 +140,6 @@ fn get_user_input() -> String {
     let mut user_input = String::new();
 
     loop {
-        println!();
         print!("Please enter a passphrase: ");
         io::stdout().flush().unwrap();
 
@@ -156,7 +154,7 @@ fn get_user_input() -> String {
         // Display the user input for verification
         println!("You entered: \"{}\"", input_trimmed);
 
-        print!("Use this passphrase? [yes/no/quit]: ");
+        print!("Use this passphrase? [y]es / [n]o / [q]uit : ");
         io::stdout().flush().unwrap();
 
         let mut ask_to_continue = String::new();
@@ -167,10 +165,11 @@ fn get_user_input() -> String {
         let trimmed_ask_to_continue = ask_to_continue.trim(); // Trim whitespace and newline characters
 
         match trimmed_ask_to_continue {
-            "yes" | "" => break, // Accept 'yes' or Enter key (empty input)
-            "quit" => std::process::exit(0),
+            "y" | "" => break, // Accept 'yes' or Enter key (empty input)
+            "q" => std::process::exit(0),
             _ => {
                 // Loop back if 'no' or different input
+                println!();
                 continue;
             }
         }
