@@ -33,12 +33,16 @@ fn main() -> io::Result<()> {
             .long("decrypt")
             .help("Decrypt the cipher file")
             .num_args(1))
-        .arg(Arg::new("dwp")
-            .long("dwp")
+        .arg(Arg::new("dwp-chacha20")
+            .long("dwp-chacha20")
             .help("Decrypt the cipher file with a passphrase")
             .num_args(1))
+            .arg(Arg::new("dwp-argon2")
+                .long("dwp-argon2")
+                .help("Decrypt the cipher file with a passphrase")
+                .num_args(1))
         .group(ArgGroup::new("mode")
-            .args(&["encrypt", "ewp", "decrypt", "dwp"])
+            .args(&["encrypt", "ewp-chacha20", "ewp-argon2", "decrypt", "dwp-chacha20", "dwp-argon2"])
             .required(true))
         .get_matches();
 
@@ -82,16 +86,15 @@ fn main() -> io::Result<()> {
 
         let passphrase: String = get_user_input();
 
-        let salt_length: usize = 16; // min 16 Byte, but <= 255 or it will require more than one Byte for pushing to the ciphertext vector
+        let salt_length: usize = 16; // min 16 Bytes, but <= 255 or it will require more than one Byte for pushing to the 'ciphertext' vector
         let salt: Vec<u8> = generate_random_key(salt_length); // Generate a unique salt for this passphrase (also doesn't actually have to be CSPRNG)
 
-        let key_length: usize = data_buffer.len(); // Desired size for the key
+        let key_length: usize = data_buffer.len();
         let key: Vec<u8> = handle_error(generate_random_key_with_argon2(passphrase.as_bytes(), &salt, key_length));
         let mut ciphertext: Vec<u8> = xor_operation(&data_buffer, &key)?;
 
         ciphertext.extend(salt); // Adding the salt to the ciphertext for writing them to a file together in a later step
-        // Cast the usize to u8 and push it to the end of the vector
-        ciphertext.push(salt_length as u8);
+        ciphertext.push(salt_length as u8); // Cast the usize to u8 and push it to the end of the vector
 
         let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
         let mut cipher_file = File::create("cipher.txt")?;
