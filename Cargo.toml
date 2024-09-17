@@ -1,9 +1,11 @@
 [package]
 name = "otp"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 
 [dependencies]
+# anyhow = "1.0.89"
+argon2 = "0.5.3"
 base64 = "0.22.1"
 clap = "4.5.16"
 rand = "0.8.5"
