@@ -4,11 +4,10 @@ use std::path::PathBuf;
 use argon2::Argon2;
 use clap::{Arg, ArgGroup, Command};
 use rand::rngs::OsRng;
-use rand::RngCore;
 use base64::prelude::*;
-// use rand::{RngCore, SeedableRng};
-// use rand_chacha::ChaCha20Rng;
-// use sha2::{Digest, Sha256};
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
+use sha2::{Digest, Sha256};
 
 
 fn main() -> io::Result<()> {
@@ -21,8 +20,12 @@ fn main() -> io::Result<()> {
             .long("encrypt")
             .help("Encrypt the data file")
             .num_args(1))
-        .arg(Arg::new("ewp")
-            .long("ewp")
+        .arg(Arg::new("ewp-chacha20")
+            .long("ewp-chacha20")
+            .help("Encrypt the data file with a passphrase")
+            .num_args(1))
+        .arg(Arg::new("ewp-argon2")
+            .long("ewp-argon2")
             .help("Encrypt the data file with a passphrase")
             .num_args(1))
         .arg(Arg::new("decrypt")
@@ -55,8 +58,24 @@ fn main() -> io::Result<()> {
         let mut key_file = File::create("key.txt")?;
         key_file.write_all(base64_key.as_bytes())?;
 
-    } else if matches.contains_id("ewp") {
+    } else if matches.contains_id("ewp-chacha20") {
         let data_file_path = PathBuf::from(matches.get_one::<String>("ewp").unwrap());
+        let mut data_file = File::open(&data_file_path)?;
+        let mut data_buffer = Vec::new();
+        data_file.read_to_end(&mut data_buffer)?;
+
+        // let key = generate_random_key(data_buffer.len());
+        let user_input = get_user_input();
+        let key = generate_random_key_with_chacha20(&user_input, data_buffer.len());
+        let ciphertext = xor_operation(&data_buffer, &key)?;
+
+        // With base64-encoding:
+        let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
+        let mut cipher_file = File::create("cipher.txt")?;
+        cipher_file.write_all(base64_cipher.as_bytes())?;
+
+    } else if matches.contains_id("ewp-argon2") {
+        let data_file_path = PathBuf::from(matches.get_one::<String>("ewp-argon2").unwrap());
         let mut data_file: File = File::open(&data_file_path)?;
         let mut data_buffer: Vec<u8> = Vec::new();
         data_file.read_to_end(&mut data_buffer)?;
@@ -67,7 +86,7 @@ fn main() -> io::Result<()> {
         let salt: Vec<u8> = generate_random_key(salt_length); // Generate a unique salt for this passphrase (also doesn't actually have to be CSPRNG)
 
         let key_length: usize = data_buffer.len(); // Desired size for the key
-        let key: Vec<u8> = handle_error(generate_key_from_passphrase(passphrase.as_bytes(), &salt, key_length));
+        let key: Vec<u8> = handle_error(generate_random_key_with_argon2(passphrase.as_bytes(), &salt, key_length));
         let mut ciphertext: Vec<u8> = xor_operation(&data_buffer, &key)?;
 
         ciphertext.extend(salt); // Adding the salt to the ciphertext for writing them to a file together in a later step
@@ -97,7 +116,7 @@ fn main() -> io::Result<()> {
         let binary_cipher: Vec<u8> = BASE64_STANDARD.decode(&base64_cipher).expect("Failed to decode base64_cipher data");
 
         // let user_input = get_user_input();
-        // let binary_key = create_random_key_from_string(&user_input, binary_cipher.len());
+        // let binary_key = generate_random_key_with_chacha20(&user_input, binary_cipher.len());
 
         // let plaintext = xor_operation(&binary_cipher, &binary_key)?;
 
@@ -177,26 +196,26 @@ fn get_user_input() -> String {
     user_input.trim().to_string()
 }
 
-// fn generate_key_from_passphrase(seed: &str, size: usize) -> Vec<u8> {
-//     // Create a seed from the input string using a cryptographic hash function
-//     let mut hasher = Sha256::new();
-//     hasher.update(seed);
-//     let hash_result = hasher.finalize();
-//
-//     // Convert the hash result to an array of bytes
-//     let seed_bytes: [u8; 32] = hash_result.into();
-//
-//     // Create a ChaCha RNG with the seed
-//     let mut rng = ChaCha20Rng::from_seed(seed_bytes);
-//
-//     // Fill a Vec<u8> with random bytes
-//     let mut key = vec![0u8; size];
-//     rng.fill_bytes(&mut key);
-//
-//     key
-// }
+fn generate_random_key_with_chacha20(seed: &str, size: usize) -> Vec<u8> {
+    // Create a seed from the input string using a cryptographic hash function
+    let mut hasher = Sha256::new();
+    hasher.update(seed);
+    let hash_result = hasher.finalize();
 
-fn generate_key_from_passphrase(
+    // Convert the hash result to an array of bytes
+    let seed_bytes: [u8; 32] = hash_result.into();
+
+    // Create a ChaCha RNG with the seed
+    let mut rng = ChaCha20Rng::from_seed(seed_bytes);
+
+    // Fill a Vec<u8> with random bytes
+    let mut key = vec![0u8; size];
+    rng.fill_bytes(&mut key);
+
+    key
+}
+
+fn generate_random_key_with_argon2(
     passphrase: &[u8],
     salt: &[u8],
     key_length: usize,
