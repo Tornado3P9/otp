@@ -7,10 +7,14 @@ Usage: otp -e secret.txt
        otp -d decrypted.txt
 
 Options:
-  -e, --encrypt <encrypt>  Encrypt the data file
-  -d, --decrypt <decrypt>  Decrypt the cipher file
-  -h, --help               Print help
-  -V, --version            Print version
+  -e, --encrypt <encrypt>            Encrypt the data file (plain otp)
+      --ewp-chacha20 <ewp-chacha20>  Encrypt the data file with a passphrase
+      --ewp-argon2 <ewp-argon2>      Encrypt the data file with a passphrase
+  -d, --decrypt <decrypt>            Decrypt the cipher file (plain otp)
+      --dwp-chacha20 <dwp-chacha20>  Decrypt the cipher file with a passphrase
+      --dwp-argon2 <dwp-argon2>      Decrypt the cipher file with a passphrase
+  -h, --help                         Print help
+  -V, --version                      Print version
 ```
 
 ### Further Readings:
