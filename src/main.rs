@@ -18,7 +18,7 @@ fn main() -> io::Result<()> {
         .arg(Arg::new("encrypt")
             .short('e')
             .long("encrypt")
-            .help("Encrypt the data file")
+            .help("Encrypt the data file (plain otp)")
             .num_args(1))
         .arg(Arg::new("ewp-chacha20")
             .long("ewp-chacha20")
@@ -31,7 +31,7 @@ fn main() -> io::Result<()> {
         .arg(Arg::new("decrypt")
             .short('d')
             .long("decrypt")
-            .help("Decrypt the cipher file")
+            .help("Decrypt the cipher file (plain otp)")
             .num_args(1))
         .arg(Arg::new("dwp-chacha20")
             .long("dwp-chacha20")
@@ -52,6 +52,10 @@ fn main() -> io::Result<()> {
         let mut data_buffer = Vec::new();
         data_file.read_to_end(&mut data_buffer)?;
 
+        if data_buffer.is_empty() {
+            return Err(data_buffer_empty_error_handler());
+        }
+
         let key = generate_random_key(data_buffer.len());
         let ciphertext = xor_operation(&data_buffer, &key)?;
 
@@ -63,10 +67,14 @@ fn main() -> io::Result<()> {
         key_file.write_all(base64_key.as_bytes())?;
 
     } else if matches.contains_id("ewp-chacha20") {
-        let data_file_path = PathBuf::from(matches.get_one::<String>("ewp").unwrap());
+        let data_file_path = PathBuf::from(matches.get_one::<String>("ewp-chacha20").unwrap());
         let mut data_file = File::open(&data_file_path)?;
         let mut data_buffer = Vec::new();
         data_file.read_to_end(&mut data_buffer)?;
+
+        if data_buffer.is_empty() {
+            return Err(data_buffer_empty_error_handler());
+        }
 
         // let key = generate_random_key(data_buffer.len());
         let user_input = get_user_input();
@@ -83,6 +91,10 @@ fn main() -> io::Result<()> {
         let mut data_file: File = File::open(&data_file_path)?;
         let mut data_buffer: Vec<u8> = Vec::new();
         data_file.read_to_end(&mut data_buffer)?;
+
+        if data_buffer.is_empty() {
+            return Err(data_buffer_empty_error_handler());
+        }
 
         let passphrase: String = get_user_input();
 
@@ -110,23 +122,38 @@ fn main() -> io::Result<()> {
         let plaintext = xor_operation(&binary_cipher, &binary_key)?;
 
         let output_file_path = PathBuf::from(matches.get_one::<String>("decrypt").unwrap());
-        
+
         let mut decrypted_file = File::create(output_file_path)?;
         decrypted_file.write_all(&plaintext)?;
 
-    } else if matches.contains_id("dwp") {
+    } else if matches.contains_id("dwp-chacha20") {
         let base64_cipher: String = fs::read_to_string("cipher.txt")?;
         let binary_cipher: Vec<u8> = BASE64_STANDARD.decode(&base64_cipher).expect("Failed to decode base64_cipher data");
 
-        // let user_input = get_user_input();
-        // let binary_key = generate_random_key_with_chacha20(&user_input, binary_cipher.len());
+        let user_input = get_user_input();
+        let binary_key = generate_random_key_with_chacha20(&user_input, binary_cipher.len());
 
-        // let plaintext = xor_operation(&binary_cipher, &binary_key)?;
+        let plaintext = xor_operation(&binary_cipher, &binary_key)?;
 
-        // let output_file_path = PathBuf::from(matches.get_one::<String>("dwp").unwrap());
+        let output_file_path = PathBuf::from(matches.get_one::<String>("dwp-chacha20").unwrap());
+
+        let mut decrypted_file = File::create(output_file_path)?;
+        decrypted_file.write_all(&plaintext)?;
+
+    } else if matches.contains_id("dwp-argon2") {
+        let base64_cipher: String = fs::read_to_string("cipher.txt")?;
+        let binary_cipher_and_salt: Vec<u8> = BASE64_STANDARD.decode(&base64_cipher).expect("Failed to decode base64_cipher data");
+
+        let passphrase: String = get_user_input();
+        let (cipher, salt) = extract_cipher_and_salt(binary_cipher_and_salt);
+        let binary_key: Vec<u8> = handle_error(generate_random_key_with_argon2(passphrase.as_bytes(), &salt, cipher.len()));
+
+        let plaintext = xor_operation(&cipher, &binary_key)?;
+
+        let output_file_path = PathBuf::from(matches.get_one::<String>("dwp-argon2").unwrap());
         
-        // let mut decrypted_file = File::create(output_file_path)?;
-        // decrypted_file.write_all(&plaintext)?;
+        let mut decrypted_file = File::create(output_file_path)?;
+        decrypted_file.write_all(&plaintext)?;
 
     } else {
         eprintln!("You must specify either --encrypt or --decrypt.");
@@ -235,5 +262,24 @@ fn handle_error<T>(result: Result<T, argon2::password_hash::Error>) -> T {
             eprintln!("An error occurred with argon2: {}", e);
             std::process::exit(1);
         }
+    }
+}
+
+fn data_buffer_empty_error_handler() -> io::Error {
+    // Define your custom error handling logic here
+    io::Error::new(io::ErrorKind::Other, "The Vec<u8> data buffer from reading the source file is empty.")
+}
+
+fn extract_cipher_and_salt(mut vec: Vec<u8>) -> (Vec<u8>, Vec<u8>) {
+    if let Some(&salt_length) = vec.last() {
+        let salt_start = vec.len() - salt_length as usize - 1;
+        let salt = vec.split_off(salt_start);
+        let cipher = vec;
+        // Remove the last byte which is the salt length
+        let salt = &salt[..salt.len() - 1];
+        (cipher, salt.to_vec())
+    } else {
+        // Handle the error case where the vector is empty
+        panic!("Vector is empty, cannot extract cipher and salt");
     }
 }
