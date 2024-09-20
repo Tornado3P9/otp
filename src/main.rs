@@ -202,6 +202,11 @@ fn get_user_input() -> String {
         // Display the user input for verification
         println!("You entered: \"{}\"", input_trimmed);
 
+        if input_trimmed.is_empty() {
+            println!();
+            continue;
+        }
+
         print!("Use this passphrase? [y]es / [n]o / [q]uit : ");
         io::stdout().flush().unwrap();
 
