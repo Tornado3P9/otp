@@ -359,6 +359,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_generate_random_key_length() {
+        let key_length: usize = 16;
+        let key: Vec<u8> = generate_random_key(key_length);
+        assert_eq!(key_length, key.len());
+    }
+
+    #[test]
     fn test_empty_vector() {
         let input = vec![];
         let result = extract_cipher_and_salt(&input);
@@ -375,7 +382,7 @@ mod tests {
 
     #[test]
     fn test_salt_length_too_long() {
-        let input = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 8]; // Salt length: 8, but actual data is only 3 bytes
+        let input = vec![1, 2, 3, 4, 5, 8]; // Salt length: 8, but actual data is only 5 bytes
         let result = extract_cipher_and_salt(&input);
         assert!(matches!(result, Err(ExtractError::InvalidSaltLength)));
     }
