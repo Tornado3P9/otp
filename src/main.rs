@@ -129,6 +129,8 @@ fn main() -> io::Result<()> {
 
         ciphertext.extend(salt); // Adding the salt to the ciphertext for writing them to a file together in a later step
         ciphertext.push(salt_length as u8); // Cast the usize to u8 and push it to the end of the vector
+        // One could also consider creating or adding a hash of the data, or employing an alternative data verification method,
+        // to determine if the data has been corrupted before encountering issues with the corrupted data itself.
 
         let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
         let mut cipher_file = File::create("cipher.txt")?;
@@ -343,8 +345,8 @@ fn extract_cipher_and_salt(vec: &[u8]) -> Result<(Vec<u8>, Vec<u8>), ExtractErro
     let salt_length = *vec.last().unwrap() as usize;
     if salt_length >= vec.len() - 5 || salt_length == 0 {
         // This checks if the salt length is greater than or equal to the length of the vector
-        // minus 5 (which accounts for the minimum length of the cipher, that argon2 expects,
-        // plus the salt length byte) or if the salt length is zero.
+        // minus 5 (which accounts for the minimum length of the cipher, that argon2 expects, plus the salt length byte)
+        // or if the salt length is zero.
         return Err(ExtractError::InvalidSaltLength);
     }
 
