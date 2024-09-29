@@ -136,12 +136,29 @@ fn main() -> io::Result<()> {
         let mut cipher_file = File::create("cipher.txt")?;
         cipher_file.write_all(base64_cipher.as_bytes())?;
     } else if matches.contains_id("decrypt") {
-        let base64_cipher: String = fs::read_to_string("cipher.txt")?;
+        // let base64_cipher: String = fs::read_to_string("cipher.txt")?;
+        // let base64_cipher = match fs::read_to_string("cipher.txt") {
+        //     Ok(content) => content,
+        //     Err(e) => {
+        //         eprintln!("Failed to read 'cipher.txt': {}", e);
+        //         return Err(e);
+        //     }
+        // };
+        let base64_cipher: String = fs::read_to_string("cipher.txt")
+            .map_err(|e| {
+                eprintln!("Failed to read 'cipher.txt'. Both 'cipher.txt' and 'key.txt' must be present.");
+                e
+            })?;
         let binary_cipher: Vec<u8> = BASE64_STANDARD
             .decode(&base64_cipher)
             .expect("Failed to decode base64_cipher data");
 
-        let base64_key: String = fs::read_to_string("key.txt")?;
+        // let base64_key: String = fs::read_to_string("key.txt")?;
+        let base64_key: String = fs::read_to_string("key.txt")
+            .map_err(|e| {
+                eprintln!("Failed to read 'key.txt'. Both 'cipher.txt' and 'key.txt' must be present.");
+                e
+            })?;
         let binary_key: Vec<u8> = BASE64_STANDARD
             .decode(&base64_key)
             .expect("Failed to decode base64_key data");
@@ -153,7 +170,12 @@ fn main() -> io::Result<()> {
         let mut decrypted_file = File::create(output_file_path)?;
         decrypted_file.write_all(&plaintext)?;
     } else if matches.contains_id("dwp-chacha20") {
-        let base64_cipher: String = fs::read_to_string("cipher.txt")?;
+        // let base64_cipher: String = fs::read_to_string("cipher.txt")?;
+        let base64_cipher: String = fs::read_to_string("cipher.txt")
+            .map_err(|e| {
+                eprintln!("Failed to read 'cipher.txt'");
+                e
+            })?;
         let binary_cipher: Vec<u8> = BASE64_STANDARD
             .decode(&base64_cipher)
             .expect("Failed to decode base64_cipher data");
@@ -168,7 +190,12 @@ fn main() -> io::Result<()> {
         let mut decrypted_file = File::create(output_file_path)?;
         decrypted_file.write_all(&plaintext)?;
     } else if matches.contains_id("dwp-argon2") {
-        let base64_cipher: String = fs::read_to_string("cipher.txt")?;
+        // let base64_cipher: String = fs::read_to_string("cipher.txt")?;
+        let base64_cipher: String = fs::read_to_string("cipher.txt")
+            .map_err(|e| {
+                eprintln!("Failed to read 'cipher.txt'");
+                e
+            })?;
         let binary_cipher_and_salt: Vec<u8> = BASE64_STANDARD
             .decode(&base64_cipher)
             .expect("Failed to decode base64_cipher data");
