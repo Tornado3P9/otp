@@ -358,6 +358,7 @@ fn data_buffer_empty_error_handler() -> io::Error {
 enum ExtractError {
     EmptyVector,
     InvalidSaltLength,
+    InvalidCipherLength,
 }
 
 fn extract_cipher_and_salt(vec: &[u8]) -> Result<(Vec<u8>, Vec<u8>), ExtractError> {
@@ -365,13 +366,19 @@ fn extract_cipher_and_salt(vec: &[u8]) -> Result<(Vec<u8>, Vec<u8>), ExtractErro
         return Err(ExtractError::EmptyVector);
     }
 
-    if vec.len() < 2 {
-        return Err(ExtractError::InvalidSaltLength);
+    // Depends on line 'let salt_length: usize = 16;' where the number is hardcoded in the main function
+    if vec.len() < 21 {
+        // If the salt_length is always 16, and the cipher is at least 4 because of the minimum length of the cipher that argon2 expects,
+        // then together with the single salt_length_byte the min length of the vector has to be 16+4+1=21.
+        // This means that I would begin with the check "vec.len()>=21 ?" because anything else would be incorrect anyway.
+        // After this I could use Reed-Solomon error correction for the integrity of the actual data. But is it even necessary?
+        // Still, when using an error correction crate, any other verification lines that follow will become redundant.
+        return Err(ExtractError::InvalidCipherLength); // length of the whole cipher.txt data vector
     }
 
     let salt_length = *vec.last().unwrap() as usize;
-    if salt_length >= vec.len() - 5 || salt_length == 0 {
-        // This checks if the salt length is greater than or equal to the length of the vector
+    if salt_length > vec.len() - 5 || salt_length == 0 {
+        // This checks if the salt length is greater than the length of the vector
         // minus 5 (which accounts for the minimum length of the cipher, that argon2 expects, plus the salt length byte)
         // or if the salt length is zero.
         return Err(ExtractError::InvalidSaltLength);
@@ -403,22 +410,30 @@ mod tests {
 
     #[test]
     fn test_valid_cipher_and_salt() {
-        let input: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 5]; // Cipher: [1, 2, 3, 4, 5, 6], Salt: [7, 8, 9, 10, 11], Salt length: 5
-        let expected_cipher: Vec<u8> = vec![1, 2, 3, 4, 5, 6];
+        // Cipher: [1, 2, 3, 4], Salt: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], Salt length: 16
+        let input: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 16];
+        let expected_cipher: Vec<u8> = vec![1, 2, 3, 4];
         let (cipher, _salt) = extract_cipher_and_salt(&input).unwrap();
         assert_eq!(cipher, expected_cipher);
     }
 
     #[test]
     fn test_salt_length_too_long() {
-        let input = vec![1, 2, 3, 4, 5, 8]; // Salt length: 8, but actual data is only 5 bytes
+        let input = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25]; // Salt length: 25, but actual data is only 21 bytes
         let result = extract_cipher_and_salt(&input);
         assert!(matches!(result, Err(ExtractError::InvalidSaltLength)));
     }
 
     #[test]
+    fn test_data_length_too_short() {
+        let input = vec![1, 2, 3, 4, 5, 2]; // Cipher: [1, 2, 3], Salt: [4, 5], Salt length: 2
+        let result = extract_cipher_and_salt(&input);
+        assert!(matches!(result, Err(ExtractError::InvalidCipherLength)));
+    }
+
+    #[test]
     fn test_salt_length_zero() {
-        let input = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0]; // Salt length: 0
+        let input = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 0]; // Salt length: 0
         let result = extract_cipher_and_salt(&input);
         assert!(matches!(result, Err(ExtractError::InvalidSaltLength)));
     }
