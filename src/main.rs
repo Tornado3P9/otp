@@ -390,6 +390,27 @@ fn extract_cipher_and_salt(vec: &[u8]) -> Result<(Vec<u8>, Vec<u8>), ExtractErro
     Ok((cipher.to_vec(), salt.to_vec()))
 }
 
+// use crc::{Crc, CRC_8_MAXIM_DOW};  // cargo add crc
+// let data: Vec<u8> = vec![1, 2, 3, 4, 5]; // Your data here
+// let checksum = crc8_checksum(&data);
+// fn crc8_checksum(data: &[u8]) -> u8 {
+//     let crc8 = Crc::<u8>::new(&CRC_8_MAXIM_DOW);
+//     crc8.checksum(&data)
+// }
+
+// let digits: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+// let result = checkISBN(&digits);
+// println!("The ISBN check2 result is: {}", result);
+// fn checkISBN(digits: &[u8]) -> u8 {
+//     let mut factor: u16 = 1;
+//     let mut sum: u16 = 0;
+//     for &digit in digits {
+//         sum = sum.wrapping_add(factor.wrapping_mul(digit as u16));
+//         factor += 1;
+//     }
+//     (sum % 256) as u8
+// }
+
 #[cfg(test)]
 mod tests {
     use super::*;
