@@ -400,12 +400,13 @@ fn extract_cipher_and_salt(vec: &[u8]) -> Result<(Vec<u8>, Vec<u8>), ExtractErro
 
 // let digits: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
 // let result = checkISBN(&digits);
-// println!("The ISBN check2 result is: {}", result);
+// println!("The ISBN check result is: {}", result);
 // fn checkISBN(digits: &[u8]) -> u8 {
 //     let mut factor: u16 = 1;
 //     let mut sum: u16 = 0;
 //     for &digit in digits {
-//         sum = sum.wrapping_add(factor.wrapping_mul(digit as u16));
+//         // sum += factor * (digit as u16); // sum could potentially experience value overflow for big numbers. However, in release mode, these checks are disabled, and overflow will result in wrapping.
+//         sum = sum.wrapping_add(factor.wrapping_mul(digit as u16)); // because of sum being u16, wrapping basically performs modulo 65536 (because of 2**16)
 //         factor += 1;
 //     }
 //     (sum % 256) as u8
