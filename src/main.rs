@@ -358,7 +358,7 @@ fn data_buffer_empty_error_handler() -> io::Error {
 enum ExtractError {
     EmptyVector,
     InvalidSaltLength,
-    InvalidCipherLength,
+    InvalidVectorLength,
 }
 
 fn extract_cipher_and_salt(vec: &[u8]) -> Result<(Vec<u8>, Vec<u8>), ExtractError> {
@@ -373,7 +373,7 @@ fn extract_cipher_and_salt(vec: &[u8]) -> Result<(Vec<u8>, Vec<u8>), ExtractErro
         // This means that I would begin with the check "vec.len()>=21 ?" because anything else would be incorrect anyway.
         // After this I could use Reed-Solomon error correction for the integrity of the actual data. But is it even necessary?
         // Still, when using an error correction crate, any other verification lines that follow will become redundant.
-        return Err(ExtractError::InvalidCipherLength); // length of the whole cipher.txt data vector
+        return Err(ExtractError::InvalidVectorLength); // length of the whole cipher.txt data vector
     }
 
     let salt_length = *vec.last().unwrap() as usize;
@@ -450,7 +450,7 @@ mod tests {
     fn test_data_length_too_short() {
         let input = vec![1, 2, 3, 4, 5, 2]; // Cipher: [1, 2, 3], Salt: [4, 5], Salt length: 2
         let result = extract_cipher_and_salt(&input);
-        assert!(matches!(result, Err(ExtractError::InvalidCipherLength)));
+        assert!(matches!(result, Err(ExtractError::InvalidVectorLength)));
     }
 
     #[test]
