@@ -368,7 +368,7 @@ fn extract_cipher_and_salt(vec: &[u8]) -> Result<(Vec<u8>, Vec<u8>), ExtractErro
 
     // Depends on line 'let salt_length: usize = 16;' where the number is hardcoded in the main function
     if vec.len() < 21 {
-        // If the salt_length is always 16, and the cipher is at least 4 because of the minimum length of the cipher that argon2 expects,
+        // If the salt_length is at least 16, and the cipher is at least 4 because of the minimum length of the cipher that argon2 expects,
         // then together with the single salt_length_byte the min length of the vector has to be 16+4+1=21.
         // This means that I would begin with the check "vec.len()>=21 ?" because anything else would be incorrect anyway.
         // After this I could use Reed-Solomon error correction for the integrity of the actual data. But is it even necessary?
