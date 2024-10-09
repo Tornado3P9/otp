@@ -95,7 +95,6 @@ fn main() -> io::Result<()> {
             return Err(data_buffer_empty_error_handler());
         }
 
-        // let key = generate_random_key(data_buffer.len());
         let user_input = get_user_input();
         let key = generate_random_key_with_chacha20(&user_input, data_buffer.len());
         let ciphertext = xor_operation(&data_buffer, &key)?;
@@ -153,7 +152,6 @@ fn main() -> io::Result<()> {
             .decode(&base64_cipher)
             .expect("Failed to decode base64_cipher data");
 
-        // let base64_key: String = fs::read_to_string("key.txt")?;
         let base64_key: String = fs::read_to_string("key.txt")
             .map_err(|e| {
                 eprintln!("Failed to read 'key.txt'. Both 'cipher.txt' and 'key.txt' must be present.");
