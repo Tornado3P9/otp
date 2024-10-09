@@ -8,29 +8,42 @@ use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use aes_gcm::{
+    aead::{AeadCore, AeadInPlace, KeyInit},
+    Aes256Gcm,
+};
 
 fn main() -> io::Result<()> {
     let matches = Command::new("otp")
-        .version("1.4")
+        .version("1.5")
         .author("Tornado3P9")
         .about("Encrypts or decrypts a file using One-Time-Pad")
+        .override_usage(
+            "otp -e INPUT_FILE\n       otp -d OUTPUT_FILE",
+        )
         .arg(
             Arg::new("encrypt")
                 .short('e')
                 .long("encrypt")
-                .help("Encrypt the data file (plain otp)")
+                .help("Encrypt the file data (plain otp)")
                 .num_args(1),
         )
         .arg(
             Arg::new("ewp-chacha20")
                 .long("ewp-chacha20")
-                .help("Encrypt the data file with a passphrase")
+                .help("Encrypt .. with a passphrase")
                 .num_args(1),
         )
         .arg(
             Arg::new("ewp-argon2")
                 .long("ewp-argon2")
-                .help("Encrypt the data file with a passphrase")
+                .help("Encrypt .. with a passphrase")
+                .num_args(1),
+        )
+        .arg(
+            Arg::new("ewp-aes256")
+                .long("ewp-aes256")
+                .help("Encrypt .. with a passphrase and AES-GCM")
                 .num_args(1),
         )
         .arg(
@@ -43,13 +56,19 @@ fn main() -> io::Result<()> {
         .arg(
             Arg::new("dwp-chacha20")
                 .long("dwp-chacha20")
-                .help("Decrypt the cipher file with a passphrase")
+                .help("Decrypt .. with a passphrase")
                 .num_args(1),
         )
         .arg(
             Arg::new("dwp-argon2")
                 .long("dwp-argon2")
-                .help("Decrypt the cipher file with a passphrase")
+                .help("Decrypt .. with a passphrase")
+                .num_args(1),
+        )
+        .arg(
+            Arg::new("dwp-aes256")
+                .long("dwp-aes256")
+                .help("Decrypt .. with a passphrase and AES-GCM")
                 .num_args(1),
         )
         .group(
@@ -58,9 +77,11 @@ fn main() -> io::Result<()> {
                     "encrypt",
                     "ewp-chacha20",
                     "ewp-argon2",
+                    "ewp-aes256",
                     "decrypt",
                     "dwp-chacha20",
                     "dwp-argon2",
+                    "dwp-aes256",
                 ])
                 .required(true),
         )
@@ -99,7 +120,6 @@ fn main() -> io::Result<()> {
         let key = generate_random_key_with_chacha20(&user_input, data_buffer.len());
         let ciphertext = xor_operation(&data_buffer, &key)?;
 
-        // With base64-encoding:
         let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
         let mut cipher_file = File::create("cipher.txt")?;
         cipher_file.write_all(base64_cipher.as_bytes())?;
@@ -134,6 +154,68 @@ fn main() -> io::Result<()> {
         let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
         let mut cipher_file = File::create("cipher.txt")?;
         cipher_file.write_all(base64_cipher.as_bytes())?;
+
+    } else if matches.contains_id("ewp-aes256") {
+        let data_file_path = PathBuf::from(matches.get_one::<String>("ewp-aes256").unwrap());
+        let mut data_file: File = File::open(&data_file_path)?;
+        let mut data_buffer: Vec<u8> = Vec::new(); // The message to be encrypted
+        data_file.read_to_end(&mut data_buffer)?;
+
+        if data_buffer.is_empty() {
+            return Err(data_buffer_empty_error_handler());
+        }
+
+        let passphrase: String = get_user_input();
+
+        let salt_length: usize = 16; // min 16 Bytes, but <= 255 or it will require more than one Byte for pushing to the 'ciphertext' vector
+        let salt: Vec<u8> = generate_random_key(salt_length); // Generate a unique salt for this passphrase (also doesn't actually have to be CSPRNG)
+
+        // Generate the key using Argon2
+        let key_length: usize = 32; // AES-256 requires a 256-bit key
+        let key: Vec<u8> = handle_error(generate_random_key_with_argon2(
+            passphrase.as_bytes(),
+            &salt,
+            key_length,
+        ));
+
+        // Initialize the cipher with the derived key
+        let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
+
+        /*
+            // Generate a random key
+            let key = Aes256Gcm::generate_key(&mut OsRng);
+
+            // Initialize the cipher
+            let cipher = Aes256Gcm::new(&key);
+
+            // Generate a random nonce
+            let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits; unique per message
+
+            // The message to be encrypted
+            let mut buffer = Vec::from(b"plaintext message".as_ref());
+
+            // Encrypt the message in-place
+            cipher
+                .encrypt_in_place(&nonce, b"", &mut buffer)
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Aes256Gcm Encryption Failed"))?;
+
+            println!("Ciphertext: {:?}", buffer);
+
+            // Decrypt the message in-place
+            cipher
+                .decrypt_in_place(&nonce, b"", &mut buffer)
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Aes256Gcm Decryption Failed"))?;
+
+            // Check if the decrypted message is the same as the original
+            assert_eq!(&buffer, b"plaintext message");
+
+            println!("Plaintext: {:?}", String::from_utf8(buffer).unwrap());
+        */
+
+        // let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
+        // let mut cipher_file = File::create("cipher.txt")?;
+        // cipher_file.write_all(base64_cipher.as_bytes())?;
+
     } else if matches.contains_id("decrypt") {
         // let base64_cipher: String = fs::read_to_string("cipher.txt")?;
         // let base64_cipher = match fs::read_to_string("cipher.txt") {
@@ -168,7 +250,6 @@ fn main() -> io::Result<()> {
         let mut decrypted_file = File::create(output_file_path)?;
         decrypted_file.write_all(&plaintext)?;
     } else if matches.contains_id("dwp-chacha20") {
-        // let base64_cipher: String = fs::read_to_string("cipher.txt")?;
         let base64_cipher: String = fs::read_to_string("cipher.txt")
             .map_err(|e| {
                 eprintln!("Failed to read 'cipher.txt'");
@@ -188,7 +269,6 @@ fn main() -> io::Result<()> {
         let mut decrypted_file = File::create(output_file_path)?;
         decrypted_file.write_all(&plaintext)?;
     } else if matches.contains_id("dwp-argon2") {
-        // let base64_cipher: String = fs::read_to_string("cipher.txt")?;
         let base64_cipher: String = fs::read_to_string("cipher.txt")
             .map_err(|e| {
                 eprintln!("Failed to read 'cipher.txt'");
@@ -331,7 +411,6 @@ fn handle_error<T>(result: Result<T, argon2::password_hash::Error>) -> T {
 }
 
 fn data_buffer_empty_error_handler() -> io::Error {
-    // Define your custom error handling logic here
     io::Error::new(
         io::ErrorKind::Other,
         "The Vec<u8> data buffer from reading the source file is empty.",
