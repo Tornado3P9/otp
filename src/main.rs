@@ -8,297 +8,316 @@ use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
-use aes_gcm::{
-    aead::{AeadCore, AeadInPlace, KeyInit},
-    Aes256Gcm,
-};
+// use aes_gcm::{
+//     aead::{AeadCore, AeadInPlace, KeyInit},
+//     Aes256Gcm,
+// };
+use openssl::symm::{Cipher, Crypter, Mode};
+use openssl::rand::rand_bytes;
 
 fn main() -> io::Result<()> {
     let matches = Command::new("otp")
         .version("1.5")
         .author("Tornado3P9")
         .about("Encrypts or decrypts a file using One-Time-Pad")
-        .override_usage(
-            "otp -e INPUT_FILE\n       otp -d OUTPUT_FILE",
-        )
-        .arg(
-            Arg::new("encrypt")
-                .short('e')
-                .long("encrypt")
-                .help("Encrypt the file data (plain otp)")
-                .num_args(1),
-        )
-        .arg(
-            Arg::new("ewp-chacha20")
-                .long("ewp-chacha20")
-                .help("Encrypt .. with a passphrase")
-                .num_args(1),
-        )
-        .arg(
-            Arg::new("ewp-argon2")
-                .long("ewp-argon2")
-                .help("Encrypt .. with a passphrase")
-                .num_args(1),
-        )
-        .arg(
-            Arg::new("ewp-aes256")
-                .long("ewp-aes256")
-                .help("Encrypt .. with a passphrase and AES-GCM")
-                .num_args(1),
-        )
-        .arg(
-            Arg::new("decrypt")
-                .short('d')
-                .long("decrypt")
-                .help("Decrypt the cipher file (plain otp)")
-                .num_args(1),
-        )
-        .arg(
-            Arg::new("dwp-chacha20")
-                .long("dwp-chacha20")
-                .help("Decrypt .. with a passphrase")
-                .num_args(1),
-        )
-        .arg(
-            Arg::new("dwp-argon2")
-                .long("dwp-argon2")
-                .help("Decrypt .. with a passphrase")
-                .num_args(1),
-        )
-        .arg(
-            Arg::new("dwp-aes256")
-                .long("dwp-aes256")
-                .help("Decrypt .. with a passphrase and AES-GCM")
-                .num_args(1),
-        )
-        .group(
-            ArgGroup::new("mode")
-                .args(&[
-                    "encrypt",
-                    "ewp-chacha20",
-                    "ewp-argon2",
-                    "ewp-aes256",
-                    "decrypt",
-                    "dwp-chacha20",
-                    "dwp-argon2",
-                    "dwp-aes256",
-                ])
-                .required(true),
+        .override_usage("otp -e INPUT_FILE\n       otp -d OUTPUT_FILE",)
+        .arg(Arg::new("encrypt").short('e').long("encrypt").help("Encrypt the file data (plain otp)").num_args(1),)
+        .arg(Arg::new("ewp-chacha20").long("ewp-chacha20").help("Encrypt .. with a passphrase").num_args(1),)
+        .arg(Arg::new("ewp-argon2").long("ewp-argon2").help("Encrypt .. with a passphrase").num_args(1),)
+        .arg(Arg::new("ewp-aes256").long("ewp-aes256").help("Encrypt .. with a passphrase and AES (openssl)").num_args(1),)
+        .arg(Arg::new("decrypt").short('d').long("decrypt").help("Decrypt the cipher file (plain otp)").num_args(1),)
+        .arg(Arg::new("dwp-chacha20").long("dwp-chacha20").help("Decrypt .. with a passphrase").num_args(1),)
+        .arg(Arg::new("dwp-argon2").long("dwp-argon2").help("Decrypt .. with a passphrase").num_args(1),)
+        .arg(Arg::new("dwp-aes256").long("dwp-aes256").help("Decrypt .. with a passphrase and AES (openssl)").num_args(1),)
+        .group(ArgGroup::new("mode")
+            .args(&["encrypt","ewp-chacha20","ewp-argon2","ewp-aes256","decrypt","dwp-chacha20","dwp-argon2","dwp-aes256",])
+            .required(true),
         )
         .get_matches();
 
-    if matches.contains_id("encrypt") {
-        let data_file_path = PathBuf::from(matches.get_one::<String>("encrypt").unwrap());
-        let mut data_file = File::open(&data_file_path)?;
-        let mut data_buffer = Vec::new();
-        data_file.read_to_end(&mut data_buffer)?;
-
-        if data_buffer.is_empty() {
-            return Err(data_buffer_empty_error_handler());
+        if matches.contains_id("encrypt") {
+            let data_file_path: &String = matches.get_one::<String>("encrypt").unwrap();
+            encrypt_otp(data_file_path)?;
         }
-
-        let key = generate_random_key(data_buffer.len());
-        let ciphertext = xor_operation(&data_buffer, &key)?;
-
-        let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
-        let base64_key: String = BASE64_STANDARD.encode(&key);
-        let mut cipher_file = File::create("cipher.txt")?;
-        cipher_file.write_all(base64_cipher.as_bytes())?;
-        let mut key_file = File::create("key.txt")?;
-        key_file.write_all(base64_key.as_bytes())?;
-    } else if matches.contains_id("ewp-chacha20") {
-        let data_file_path = PathBuf::from(matches.get_one::<String>("ewp-chacha20").unwrap());
-        let mut data_file = File::open(&data_file_path)?;
-        let mut data_buffer = Vec::new();
-        data_file.read_to_end(&mut data_buffer)?;
-
-        if data_buffer.is_empty() {
-            return Err(data_buffer_empty_error_handler());
+        else if matches.contains_id("ewp-chacha20") {
+            let data_file_path: &String = matches.get_one::<String>("ewp-chacha20").unwrap();
+            ewp_chacha20(data_file_path)?;
         }
-
-        let user_input = get_user_input();
-        let key = generate_random_key_with_chacha20(&user_input, data_buffer.len());
-        let ciphertext = xor_operation(&data_buffer, &key)?;
-
-        let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
-        let mut cipher_file = File::create("cipher.txt")?;
-        cipher_file.write_all(base64_cipher.as_bytes())?;
-    } else if matches.contains_id("ewp-argon2") {
-        let data_file_path = PathBuf::from(matches.get_one::<String>("ewp-argon2").unwrap());
-        let mut data_file: File = File::open(&data_file_path)?;
-        let mut data_buffer: Vec<u8> = Vec::new();
-        data_file.read_to_end(&mut data_buffer)?;
-
-        if data_buffer.is_empty() {
-            return Err(data_buffer_empty_error_handler());
+        else if matches.contains_id("ewp-argon2") {
+            let data_file_path: &String = matches.get_one::<String>("ewp-argon2").unwrap();
+            ewp_argon2(data_file_path)?;
         }
-
-        let passphrase: String = get_user_input();
-
-        let salt_length: usize = 16; // min 16 Bytes, but <= 255 or it will require more than one Byte for pushing to the 'ciphertext' vector
-        let salt: Vec<u8> = generate_random_key(salt_length); // Generate a unique salt for this passphrase (also doesn't actually have to be CSPRNG)
-
-        let key_length: usize = data_buffer.len();
-        let key: Vec<u8> = handle_error(generate_random_key_with_argon2(
-            passphrase.as_bytes(),
-            &salt,
-            key_length,
-        ));
-        let mut ciphertext: Vec<u8> = xor_operation(&data_buffer, &key)?;
-
-        ciphertext.extend(salt); // Adding the salt to the ciphertext for writing them to a file together in a later step
-        ciphertext.push(salt_length as u8); // Cast the usize to u8 and push it to the end of the vector
-        // One could also consider creating or adding a hash of the data, or employing an alternative data verification method,
-        // to determine if the data has been corrupted before encountering issues with the corrupted data itself.
-
-        let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
-        let mut cipher_file = File::create("cipher.txt")?;
-        cipher_file.write_all(base64_cipher.as_bytes())?;
-
-    } else if matches.contains_id("ewp-aes256") {
-        let data_file_path = PathBuf::from(matches.get_one::<String>("ewp-aes256").unwrap());
-        let mut data_file: File = File::open(&data_file_path)?;
-        let mut data_buffer: Vec<u8> = Vec::new(); // The message to be encrypted
-        data_file.read_to_end(&mut data_buffer)?;
-
-        if data_buffer.is_empty() {
-            return Err(data_buffer_empty_error_handler());
+        else if matches.contains_id("ewp-aes256") {
+            let data_file_path: &String = matches.get_one::<String>("ewp-aes256").unwrap();
+            ewp_aes256(data_file_path)?;
         }
-
-        let passphrase: String = get_user_input();
-
-        let salt_length: usize = 16; // min 16 Bytes, but <= 255 or it will require more than one Byte for pushing to the 'ciphertext' vector
-        let salt: Vec<u8> = generate_random_key(salt_length); // Generate a unique salt for this passphrase (also doesn't actually have to be CSPRNG)
-
-        // Generate the key using Argon2
-        let key_length: usize = 32; // AES-256 requires a 256-bit key
-        let key: Vec<u8> = handle_error(generate_random_key_with_argon2(
-            passphrase.as_bytes(),
-            &salt,
-            key_length,
-        ));
-
-        // Initialize the cipher with the derived key
-        let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
-
-        /*
-            // Generate a random key
-            let key = Aes256Gcm::generate_key(&mut OsRng);
-
-            // Initialize the cipher
-            let cipher = Aes256Gcm::new(&key);
-
-            // Generate a random nonce
-            let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits; unique per message
-
-            // The message to be encrypted
-            let mut buffer = Vec::from(b"plaintext message".as_ref());
-
-            // Encrypt the message in-place
-            cipher
-                .encrypt_in_place(&nonce, b"", &mut buffer)
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Aes256Gcm Encryption Failed"))?;
-
-            println!("Ciphertext: {:?}", buffer);
-
-            // Decrypt the message in-place
-            cipher
-                .decrypt_in_place(&nonce, b"", &mut buffer)
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Aes256Gcm Decryption Failed"))?;
-
-            // Check if the decrypted message is the same as the original
-            assert_eq!(&buffer, b"plaintext message");
-
-            println!("Plaintext: {:?}", String::from_utf8(buffer).unwrap());
-        */
-
-        // let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
-        // let mut cipher_file = File::create("cipher.txt")?;
-        // cipher_file.write_all(base64_cipher.as_bytes())?;
-
-    } else if matches.contains_id("decrypt") {
-        // let base64_cipher: String = fs::read_to_string("cipher.txt")?;
-        // let base64_cipher = match fs::read_to_string("cipher.txt") {
-        //     Ok(content) => content,
-        //     Err(e) => {
-        //         eprintln!("Failed to read 'cipher.txt': {}", e);
-        //         return Err(e);
-        //     }
-        // };
-        let base64_cipher: String = fs::read_to_string("cipher.txt")
-            .map_err(|e| {
-                eprintln!("Failed to read 'cipher.txt'. Both 'cipher.txt' and 'key.txt' must be present.");
-                e
-            })?;
-        let binary_cipher: Vec<u8> = BASE64_STANDARD
-            .decode(&base64_cipher)
-            .expect("Failed to decode base64_cipher data");
-
-        let base64_key: String = fs::read_to_string("key.txt")
-            .map_err(|e| {
-                eprintln!("Failed to read 'key.txt'. Both 'cipher.txt' and 'key.txt' must be present.");
-                e
-            })?;
-        let binary_key: Vec<u8> = BASE64_STANDARD
-            .decode(&base64_key)
-            .expect("Failed to decode base64_key data");
-
-        let plaintext = xor_operation(&binary_cipher, &binary_key)?;
-
-        let output_file_path = PathBuf::from(matches.get_one::<String>("decrypt").unwrap());
-
-        let mut decrypted_file = File::create(output_file_path)?;
-        decrypted_file.write_all(&plaintext)?;
-    } else if matches.contains_id("dwp-chacha20") {
-        let base64_cipher: String = fs::read_to_string("cipher.txt")
-            .map_err(|e| {
-                eprintln!("Failed to read 'cipher.txt'");
-                e
-            })?;
-        let binary_cipher: Vec<u8> = BASE64_STANDARD
-            .decode(&base64_cipher)
-            .expect("Failed to decode base64_cipher data");
-
-        let user_input = get_user_input();
-        let binary_key = generate_random_key_with_chacha20(&user_input, binary_cipher.len());
-
-        let plaintext = xor_operation(&binary_cipher, &binary_key)?;
-
-        let output_file_path = PathBuf::from(matches.get_one::<String>("dwp-chacha20").unwrap());
-
-        let mut decrypted_file = File::create(output_file_path)?;
-        decrypted_file.write_all(&plaintext)?;
-    } else if matches.contains_id("dwp-argon2") {
-        let base64_cipher: String = fs::read_to_string("cipher.txt")
-            .map_err(|e| {
-                eprintln!("Failed to read 'cipher.txt'");
-                e
-            })?;
-        let binary_cipher_and_salt: Vec<u8> = BASE64_STANDARD
-            .decode(&base64_cipher)
-            .expect("Failed to decode base64_cipher data");
-
-        let passphrase: String = get_user_input();
-        let (cipher, salt) = extract_cipher_and_salt(&binary_cipher_and_salt).unwrap();
-        let binary_key: Vec<u8> = handle_error(generate_random_key_with_argon2(
-            passphrase.as_bytes(),
-            &salt,
-            cipher.len(),
-        ));
-
-        let plaintext = xor_operation(&cipher, &binary_key)?;
-
-        let output_file_path = PathBuf::from(matches.get_one::<String>("dwp-argon2").unwrap());
-
-        let mut decrypted_file = File::create(output_file_path)?;
-        decrypted_file.write_all(&plaintext)?;
-    } else {
-        eprintln!("You must specify either --encrypt or --decrypt.");
-        std::process::exit(1);
-    }
+        else if matches.contains_id("decrypt") {
+            let data_file_path: &String = matches.get_one::<String>("decrypt").unwrap();
+            decrypt_otp(data_file_path)?;
+        }
+        else if matches.contains_id("dwp-chacha20") {
+            let data_file_path: &String = matches.get_one::<String>("dwp-chacha20").unwrap();
+            dwp_chacha20(data_file_path)?;
+        }
+        else if matches.contains_id("dwp-argon2") {
+            let data_file_path: &String = matches.get_one::<String>("dwp-argon2").unwrap();
+            dwp_argon2(data_file_path)?;
+        }
+        else if matches.contains_id("dwp-aes256") {
+            let data_file_path: &String = matches.get_one::<String>("dwp-aes256").unwrap();
+            dwp_aes256(data_file_path)?;
+        } else {
+            eprintln!("You must specify either --encrypt or --decrypt.");
+            std::process::exit(1);
+        }
 
     Ok(())
 }
+
+
+fn encrypt_otp(data_file_path: &str) -> io::Result<()> {
+    let mut data_file = File::open(&data_file_path)?;
+    let mut data_buffer: Vec<u8> = Vec::new();
+    data_file.read_to_end(&mut data_buffer)?;
+
+    if data_buffer.is_empty() {
+        return Err(data_buffer_empty_error_handler());
+    }
+
+    let key: Vec<u8> = generate_random_key(data_buffer.len());
+    let ciphertext: Vec<u8> = xor_operation(&data_buffer, &key)?;
+
+    let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
+    let base64_key: String = BASE64_STANDARD.encode(&key);
+    let mut cipher_file = File::create("cipher.txt")?;
+    cipher_file.write_all(base64_cipher.as_bytes())?;
+    let mut key_file = File::create("key.txt")?;
+    key_file.write_all(base64_key.as_bytes())?;
+
+    Ok(())
+}
+
+fn ewp_chacha20(data_file_path: &str) -> io::Result<()> {
+    let mut data_file = File::open(&data_file_path)?;
+    let mut data_buffer: Vec<u8> = Vec::new();
+    data_file.read_to_end(&mut data_buffer)?;
+
+    if data_buffer.is_empty() {
+        return Err(data_buffer_empty_error_handler());
+    }
+
+    let user_input: String = get_user_input();
+    let key: Vec<u8> = generate_random_key_with_chacha20(&user_input, data_buffer.len());
+    let ciphertext: Vec<u8> = xor_operation(&data_buffer, &key)?;
+
+    let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
+    let mut cipher_file = File::create("cipher.txt")?;
+    cipher_file.write_all(base64_cipher.as_bytes())?;
+
+    Ok(())
+}
+
+fn ewp_argon2(data_file_path: &str) -> io::Result<()> {
+    let mut data_file = File::open(&data_file_path)?;
+    let mut data_buffer: Vec<u8> = Vec::new();
+    data_file.read_to_end(&mut data_buffer)?;
+
+    if data_buffer.is_empty() {
+        return Err(data_buffer_empty_error_handler());
+    }
+
+    let passphrase: String = get_user_input();
+
+    let salt_length: usize = 16; // min 16 Bytes, but <= 255 or it will require more than one Byte for pushing to the 'ciphertext' vector
+    let salt: Vec<u8> = generate_random_key(salt_length); // Generate a unique salt for this passphrase (also doesn't actually have to be CSPRNG)
+
+    let key_length: usize = data_buffer.len();
+    let key: Vec<u8> = handle_error(generate_random_key_with_argon2(
+        passphrase.as_bytes(),
+        &salt,
+        key_length,
+    ));
+    let mut ciphertext: Vec<u8> = xor_operation(&data_buffer, &key)?;
+
+    ciphertext.extend(salt); // Adding the salt to the ciphertext for writing them to a file together in a later step
+    ciphertext.push(salt_length as u8); // Cast the usize to u8 and push it to the end of the vector
+    // One could also consider creating or adding a hash of the data, or employing an alternative data verification method,
+    // to determine if the data has been corrupted before encountering issues with the corrupted data itself.
+
+    let base64_cipher: String = BASE64_STANDARD.encode(&ciphertext);
+    let mut cipher_file = File::create("cipher.txt")?;
+    cipher_file.write_all(base64_cipher.as_bytes())?;
+
+    Ok(())
+}
+
+fn ewp_aes256(data_file_path: &str) -> io::Result<()> {
+    let mut data_file = File::open(&data_file_path)?;
+    let mut data_buffer: Vec<u8> = Vec::new();
+    data_file.read_to_end(&mut data_buffer)?;
+
+    if data_buffer.is_empty() {
+        return Err(data_buffer_empty_error_handler());
+    }
+
+    let passphrase: String = get_user_input();
+
+    let salt_length: usize = 16; // min 16 Bytes, but <= 255 or it will require more than one Byte for pushing to the 'ciphertext' vector
+    let salt: Vec<u8> = generate_random_key(salt_length); // Generate a unique salt for this passphrase (also doesn't actually have to be CSPRNG)
+
+    let cipher = Cipher::aes_256_cbc();
+    let mut iv: Vec<u8> = vec![0; cipher.iv_len().unwrap()];
+    rand_bytes(&mut iv).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+    let mut key: Vec<u8> = vec![0; cipher.key_len()];
+    openssl::pkcs5::pbkdf2_hmac(passphrase.as_bytes(), &salt, 10000, openssl::hash::MessageDigest::sha256(), &mut key)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+    let mut crypter = Crypter::new(cipher, Mode::Encrypt, &key, Some(&iv))
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let mut ciphertext: Vec<u8> = vec![0; data_buffer.len() + cipher.block_size()];
+    let count: usize = crypter.update(&data_buffer, &mut ciphertext)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let rest: usize = crypter.finalize(&mut ciphertext[count..])
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    ciphertext.truncate(count + rest);
+
+    // let mut encrypted_data = File::create("cipher.txt")?;
+    // encrypted_data.write_all(&iv)?;
+    // encrypted_data.write_all(&ciphertext)?;
+    // encrypted_data.write_all(&salt)?;
+    // encrypted_data.write_all(&salt_length)?;
+    
+    let mut encrypted_data: Vec<u8> = Vec::new();
+    encrypted_data.extend(iv);
+    encrypted_data.extend(ciphertext);
+    encrypted_data.extend(salt);
+    encrypted_data.push(salt_length as u8);
+
+    let base64_cipher: String = BASE64_STANDARD.encode(&encrypted_data);
+    let mut cipher_file = File::create("cipher.txt")?;
+    cipher_file.write_all(base64_cipher.as_bytes())?;
+
+    Ok(())
+}
+
+fn decrypt_otp(data_file_path: &str) -> io::Result<()> {    
+    // let base64_cipher: String = fs::read_to_string("cipher.txt")?;
+    // let base64_cipher = match fs::read_to_string("cipher.txt") {
+    //     Ok(content) => content,
+    //     Err(e) => {
+    //         eprintln!("Failed to read 'cipher.txt': {}", e);
+    //         return Err(e);
+    //     }
+    // };
+    let base64_cipher: String = fs::read_to_string("cipher.txt")
+        .map_err(|e| {
+            eprintln!("Failed to read 'cipher.txt'. Both 'cipher.txt' and 'key.txt' must be present.");
+            e
+        })?;
+    let binary_cipher: Vec<u8> = BASE64_STANDARD
+        .decode(&base64_cipher)
+        .expect("Failed to decode base64_cipher data");
+
+    let base64_key: String = fs::read_to_string("key.txt")
+        .map_err(|e| {
+            eprintln!("Failed to read 'key.txt'. Both 'cipher.txt' and 'key.txt' must be present.");
+            e
+        })?;
+    let binary_key: Vec<u8> = BASE64_STANDARD
+        .decode(&base64_key)
+        .expect("Failed to decode base64_key data");
+
+    let plaintext = xor_operation(&binary_cipher, &binary_key)?;
+
+    let output_file_path = PathBuf::from(data_file_path);
+    let mut decrypted_file = File::create(output_file_path)?;
+    decrypted_file.write_all(&plaintext)?;
+
+    Ok(())
+}
+
+fn dwp_chacha20(data_file_path: &str) -> io::Result<()> {
+    let base64_cipher: String = fs::read_to_string("cipher.txt")
+    .map_err(|e| {
+        eprintln!("Failed to read 'cipher.txt'");
+        e
+    })?;
+    let binary_cipher: Vec<u8> = BASE64_STANDARD
+        .decode(&base64_cipher)
+        .expect("Failed to decode base64_cipher data");
+
+    let user_input = get_user_input();
+    let binary_key = generate_random_key_with_chacha20(&user_input, binary_cipher.len());
+
+    let plaintext = xor_operation(&binary_cipher, &binary_key)?;
+
+    let output_file_path = PathBuf::from(data_file_path);
+    let mut decrypted_file = File::create(output_file_path)?;
+    decrypted_file.write_all(&plaintext)?;
+
+    Ok(())
+}
+
+fn dwp_argon2(data_file_path: &str) -> io::Result<()> {
+    let base64_cipher: String = fs::read_to_string("cipher.txt")
+        .map_err(|e| {
+            eprintln!("Failed to read 'cipher.txt'");
+            e
+        })?;
+    let binary_cipher_and_salt: Vec<u8> = BASE64_STANDARD
+        .decode(&base64_cipher)
+        .expect("Failed to decode base64_cipher data");
+
+    let passphrase: String = get_user_input();
+    let (cipher, salt) = extract_cipher_and_salt(&binary_cipher_and_salt).unwrap();
+    let binary_key: Vec<u8> = handle_error(generate_random_key_with_argon2(
+        passphrase.as_bytes(),
+        &salt,
+        cipher.len(),
+    ));
+
+    let plaintext = xor_operation(&cipher, &binary_key)?;
+
+    let output_file_path = PathBuf::from(data_file_path);
+    let mut decrypted_file = File::create(output_file_path)?;
+    decrypted_file.write_all(&plaintext)?;
+
+    Ok(())
+}
+
+fn dwp_aes256(data_file_path: &str) -> io::Result<()> {
+    println!("until here");
+    // let mut file = File::open(input_file)?;
+    // let cipher = Cipher::aes_256_cbc();
+
+    // // Read the IV from the beginning of the file
+    // let mut iv = vec![0; cipher.iv_len().unwrap()];
+    // file.read_exact(&mut iv)?;
+
+    // let salt = vec![8, 4, 5, 6, 7];
+    // let mut key = vec![0; cipher.key_len()];
+    // openssl::pkcs5::pbkdf2_hmac(password, &salt, 10000, openssl::hash::MessageDigest::sha256(), &mut key)
+    //     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+    // let mut encrypted_data = Vec::new();
+    // file.read_to_end(&mut encrypted_data)?;
+
+    // let mut crypter = Crypter::new(cipher, Mode::Decrypt, &key, Some(&iv))
+    //     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    // let mut decrypted_data = vec![0; encrypted_data.len() + cipher.block_size()];
+    // let count = crypter.update(&encrypted_data, &mut decrypted_data)
+    //     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    // let rest = crypter.finalize(&mut decrypted_data[count..])
+    //     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    // decrypted_data.truncate(count + rest);
+
+    // let mut output = File::create(output_file)?;
+    // output.write_all(&decrypted_data)?;
+
+    Ok(())
+}
+
 
 // // A pseudo-random number generator (PRNG)
 // fn generate_random_key(length: usize) -> Vec<u8> {
