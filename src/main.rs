@@ -24,52 +24,53 @@ fn main() -> io::Result<()> {
         .arg(Arg::new("encrypt").short('e').long("encrypt").help("Encrypt the file data (plain otp)").num_args(1),)
         .arg(Arg::new("ewp-chacha20").long("ewp-chacha20").help("Encrypt .. with a passphrase").num_args(1),)
         .arg(Arg::new("ewp-argon2").long("ewp-argon2").help("Encrypt .. with a passphrase").num_args(1),)
-        .arg(Arg::new("ewp-aes256").long("ewp-aes256").help("Encrypt .. with a passphrase and AES (openssl)").num_args(1),)
+        .arg(Arg::new("ewp-aes256").long("ewp-aes256").help("Encrypt .. with a passphrase and AES-256-CBC (openssl)").num_args(1),)
         .arg(Arg::new("decrypt").short('d').long("decrypt").help("Decrypt the cipher file (plain otp)").num_args(1),)
         .arg(Arg::new("dwp-chacha20").long("dwp-chacha20").help("Decrypt .. with a passphrase").num_args(1),)
         .arg(Arg::new("dwp-argon2").long("dwp-argon2").help("Decrypt .. with a passphrase").num_args(1),)
-        .arg(Arg::new("dwp-aes256").long("dwp-aes256").help("Decrypt .. with a passphrase and AES (openssl)").num_args(1),)
+        .arg(Arg::new("dwp-aes256").long("dwp-aes256").help("Decrypt .. with a passphrase and AES-256-CBC (openssl)").num_args(1),)
         .group(ArgGroup::new("mode")
             .args(&["encrypt","ewp-chacha20","ewp-argon2","ewp-aes256","decrypt","dwp-chacha20","dwp-argon2","dwp-aes256",])
             .required(true),
         )
         .get_matches();
 
-        if matches.contains_id("encrypt") {
-            let data_file_path: &String = matches.get_one::<String>("encrypt").unwrap();
-            encrypt_otp(data_file_path)?;
-        }
-        else if matches.contains_id("ewp-chacha20") {
-            let data_file_path: &String = matches.get_one::<String>("ewp-chacha20").unwrap();
-            ewp_chacha20(data_file_path)?;
-        }
-        else if matches.contains_id("ewp-argon2") {
-            let data_file_path: &String = matches.get_one::<String>("ewp-argon2").unwrap();
-            ewp_argon2(data_file_path)?;
-        }
-        else if matches.contains_id("ewp-aes256") {
-            let data_file_path: &String = matches.get_one::<String>("ewp-aes256").unwrap();
-            ewp_aes256(data_file_path)?;
-        }
-        else if matches.contains_id("decrypt") {
-            let data_file_path: &String = matches.get_one::<String>("decrypt").unwrap();
-            decrypt_otp(data_file_path)?;
-        }
-        else if matches.contains_id("dwp-chacha20") {
-            let data_file_path: &String = matches.get_one::<String>("dwp-chacha20").unwrap();
-            dwp_chacha20(data_file_path)?;
-        }
-        else if matches.contains_id("dwp-argon2") {
-            let data_file_path: &String = matches.get_one::<String>("dwp-argon2").unwrap();
-            dwp_argon2(data_file_path)?;
-        }
-        else if matches.contains_id("dwp-aes256") {
-            let data_file_path: &String = matches.get_one::<String>("dwp-aes256").unwrap();
-            dwp_aes256(data_file_path)?;
-        } else {
-            eprintln!("You must specify either --encrypt or --decrypt.");
-            std::process::exit(1);
-        }
+    if matches.contains_id("encrypt") {
+        let data_file_path: &String = matches.get_one::<String>("encrypt").unwrap();
+        encrypt_otp(data_file_path)?;
+    }
+    else if matches.contains_id("ewp-chacha20") {
+        let data_file_path: &String = matches.get_one::<String>("ewp-chacha20").unwrap();
+        ewp_chacha20(data_file_path)?;
+    }
+    else if matches.contains_id("ewp-argon2") {
+        let data_file_path: &String = matches.get_one::<String>("ewp-argon2").unwrap();
+        ewp_argon2(data_file_path)?;
+    }
+    else if matches.contains_id("ewp-aes256") {
+        let data_file_path: &String = matches.get_one::<String>("ewp-aes256").unwrap();
+        ewp_aes256(data_file_path)?;
+    }
+    else if matches.contains_id("decrypt") {
+        let data_file_path: &String = matches.get_one::<String>("decrypt").unwrap();
+        decrypt_otp(data_file_path)?;
+    }
+    else if matches.contains_id("dwp-chacha20") {
+        let data_file_path: &String = matches.get_one::<String>("dwp-chacha20").unwrap();
+        dwp_chacha20(data_file_path)?;
+    }
+    else if matches.contains_id("dwp-argon2") {
+        let data_file_path: &String = matches.get_one::<String>("dwp-argon2").unwrap();
+        dwp_argon2(data_file_path)?;
+    }
+    else if matches.contains_id("dwp-aes256") {
+        let data_file_path: &String = matches.get_one::<String>("dwp-aes256").unwrap();
+        dwp_aes256(data_file_path)?;
+    }
+    else {
+        eprintln!("You must specify either --encrypt or --decrypt.");
+        // std::process::exit(1);
+    }
 
     Ok(())
 }
@@ -287,33 +288,45 @@ fn dwp_argon2(data_file_path: &str) -> io::Result<()> {
 }
 
 fn dwp_aes256(data_file_path: &str) -> io::Result<()> {
-    println!("until here");
-    // let mut file = File::open(input_file)?;
-    // let cipher = Cipher::aes_256_cbc();
+    let base64_cipher: String = fs::read_to_string("cipher.txt")
+        .map_err(|e| {
+            eprintln!("Failed to read 'cipher.txt'");
+            e
+        })?;
+    let iv_and_binary_cipher_and_salt: Vec<u8> = BASE64_STANDARD
+        .decode(&base64_cipher)
+        .expect("Failed to decode base64_cipher data");
 
-    // // Read the IV from the beginning of the file
-    // let mut iv = vec![0; cipher.iv_len().unwrap()];
-    // file.read_exact(&mut iv)?;
+    let passphrase: String = get_user_input();
 
-    // let salt = vec![8, 4, 5, 6, 7];
-    // let mut key = vec![0; cipher.key_len()];
-    // openssl::pkcs5::pbkdf2_hmac(password, &salt, 10000, openssl::hash::MessageDigest::sha256(), &mut key)
-    //     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let cipher = Cipher::aes_256_cbc();
+    // the blocks for AES will usually be 16 bytes in size (or 128 bits)..
 
-    // let mut encrypted_data = Vec::new();
-    // file.read_to_end(&mut encrypted_data)?;
+    // Read the initialization vector (IV) from the beginning of the file
+    let iv_len: usize = cipher.iv_len().unwrap();
+    let mut iv: Vec<u8> = Vec::new();
+    for &item in iv_and_binary_cipher_and_salt.iter().take(iv_len) {
+        iv.push(item);
+    }
 
-    // let mut crypter = Crypter::new(cipher, Mode::Decrypt, &key, Some(&iv))
-    //     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    // let mut decrypted_data = vec![0; encrypted_data.len() + cipher.block_size()];
-    // let count = crypter.update(&encrypted_data, &mut decrypted_data)
-    //     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    // let rest = crypter.finalize(&mut decrypted_data[count..])
-    //     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    // decrypted_data.truncate(count + rest);
+    let binary_cipher_and_salt_slice: &[u8] = iv_and_binary_cipher_and_salt.get(iv_len..).unwrap_or(&[]); // return cipher and salt or empty vector
+    let (encrypted_data, salt) = extract_cipher_and_salt(&binary_cipher_and_salt_slice).unwrap();
 
-    // let mut output = File::create(output_file)?;
-    // output.write_all(&decrypted_data)?;
+    let mut key: Vec<u8> = vec![0; cipher.key_len()];
+    openssl::pkcs5::pbkdf2_hmac(passphrase.as_bytes(), &salt, 10000, openssl::hash::MessageDigest::sha256(), &mut key)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+    let mut crypter = Crypter::new(cipher, Mode::Decrypt, &key, Some(&iv))
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let mut decrypted_data = vec![0; encrypted_data.len() + cipher.block_size()];
+    let count = crypter.update(&encrypted_data, &mut decrypted_data)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let rest = crypter.finalize(&mut decrypted_data[count..])
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    decrypted_data.truncate(count + rest);
+
+    let mut output = File::create(data_file_path)?;
+    output.write_all(&decrypted_data)?;
 
     Ok(())
 }
