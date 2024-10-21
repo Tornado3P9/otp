@@ -8,12 +8,12 @@ use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use openssl::symm::{Cipher, Crypter, Mode};
+use openssl::rand::rand_bytes;
 // use aes_gcm::{
 //     aead::{AeadCore, AeadInPlace, KeyInit},
 //     Aes256Gcm,
 // };
-use openssl::symm::{Cipher, Crypter, Mode};
-use openssl::rand::rand_bytes;
 
 fn main() -> io::Result<()> {
     let matches = Command::new("otp")
