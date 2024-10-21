@@ -204,12 +204,11 @@ fn ewp_aes256(data_file_path: &str) -> io::Result<()> {
 
 fn decrypt_otp(data_file_path: &str) -> io::Result<()> {    
     // let base64_cipher: String = fs::read_to_string("cipher.txt")?;
-    // let base64_cipher = match fs::read_to_string("cipher.txt") {
+    // let base64_cipher: String = fs::read_to_string("cipher.txt")
+    //     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    // let base64_cipher: String = match fs::read_to_string("cipher.txt") {
     //     Ok(content) => content,
-    //     Err(e) => {
-    //         eprintln!("Failed to read 'cipher.txt': {}", e);
-    //         return Err(e);
-    //     }
+    //     Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Failed to read 'cipher.txt': {}", e))),
     // };
     let base64_cipher: String = fs::read_to_string("cipher.txt")
         .map_err(|e| {
@@ -305,6 +304,9 @@ fn dwp_aes256(data_file_path: &str) -> io::Result<()> {
     // Read the initialization vector (IV) from the beginning of the file
     let iv_len: usize = cipher.iv_len().unwrap();
     let mut iv: Vec<u8> = Vec::new();
+    if iv_len > iv_and_binary_cipher_and_salt.len() {
+        panic!("Initialization vector length is greater than the combined length of IV, cipher, and salt.");
+    }
     for &item in iv_and_binary_cipher_and_salt.iter().take(iv_len) {
         iv.push(item);
     }
@@ -314,15 +316,27 @@ fn dwp_aes256(data_file_path: &str) -> io::Result<()> {
 
     let mut key: Vec<u8> = vec![0; cipher.key_len()];
     openssl::pkcs5::pbkdf2_hmac(passphrase.as_bytes(), &salt, 10000, openssl::hash::MessageDigest::sha256(), &mut key)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("PBKDF2 operation failed: {}", e)))?;
 
     let mut crypter = Crypter::new(cipher, Mode::Decrypt, &key, Some(&iv))
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
     let mut decrypted_data = vec![0; encrypted_data.len() + cipher.block_size()];
     let count = crypter.update(&encrypted_data, &mut decrypted_data)
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
     let rest = crypter.finalize(&mut decrypted_data[count..])
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(|e| {
+            if e.errors().iter().any(|error| error.reason() == Some("bad decrypt")) {
+                io::Error::new(io::ErrorKind::InvalidInput, "Incorrect passphrase")
+            } else {
+                io::Error::new(io::ErrorKind::Other, format!("Finalize failed: {}", e))
+            }
+        })?;
+
+    if count + rest > decrypted_data.len() {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Decryption failed: output size exceeds buffer length"));
+    }
     decrypted_data.truncate(count + rest);
 
     let mut output = File::create(data_file_path)?;
@@ -374,7 +388,8 @@ fn get_user_input() -> String {
         // Display the user input for verification
         println!("You entered: \"{}\"", input_trimmed);
 
-        if input_trimmed.is_empty() {
+        if input_trimmed.is_empty() || input_trimmed.len() < 12 {
+            println!("Input too short. Your passphrase must be at least 12 characters long. Please ensure it includes a mix of letters, numbers, and special characters to enhance security.");
             println!();
             continue;
         }
