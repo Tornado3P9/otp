@@ -548,6 +548,51 @@ mod tests {
     }
 
     #[test]
+    fn test_random_key_uniqueness() {
+        let length = 10;
+        let key1 = generate_random_key(length);
+        let key2 = generate_random_key(length);
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_generate_random_key_with_chacha20() {
+        let key_1: Vec<u8> = generate_random_key_with_chacha20("private", 42);
+        let key_2: Vec<u8> = generate_random_key_with_chacha20("private", 42);
+        let key_3: Vec<u8> = generate_random_key_with_chacha20("secret", 42);
+        assert_eq!(key_1, key_2);
+        assert_ne!(key_1, key_3);
+        assert_eq!(key_1.len(), 42);
+    }
+
+    #[test]
+    fn test_generate_random_key_with_argon2() {
+        let passphrase: String = "private".to_string();
+        let salt_length: usize = 16;
+        let salt_1: Vec<u8> = generate_random_key(salt_length);
+        let salt_2: Vec<u8> = generate_random_key(salt_length);
+        let key_length: usize = 42;
+        let key_1: Vec<u8> = handle_error(generate_random_key_with_argon2(
+            passphrase.as_bytes(),
+            &salt_1,
+            key_length,
+        ));
+        let key_2: Vec<u8> = handle_error(generate_random_key_with_argon2(
+            passphrase.as_bytes(),
+            &salt_2,
+            key_length,
+        ));
+        let key_3: Vec<u8> = handle_error(generate_random_key_with_argon2(
+            passphrase.as_bytes(),
+            &salt_1,
+            key_length,
+        ));
+        assert_ne!(key_1, key_2);
+        assert_eq!(key_1, key_3);
+        assert_eq!(key_1.len(), key_length);
+    }
+
+    #[test]
     fn test_empty_vector() {
         let input = vec![];
         let result = extract_cipher_and_salt(&input);

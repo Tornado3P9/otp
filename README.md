@@ -19,6 +19,11 @@ Options:
   -V, --version                      Print version
 ```
 
+Dependencies for Ubuntu:  
+```bash
+sudo apt install libssl-dev
+```
+
 ### Further Readings:
 
 - [Practical Cryptography for Developers - eBook](https://cryptobook.nakov.com/)
