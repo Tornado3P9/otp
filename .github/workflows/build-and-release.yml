@@ -51,3 +51,4 @@ jobs:
         asset_path: ./target/release/otp
         asset_name: otp
         asset_content_type: application/octet-stream
+
