@@ -28,6 +28,9 @@ jobs:
     - name: Build
       run: cargo build --release
 
+    - name: Run tests
+      run: cargo test --verbose
+
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
