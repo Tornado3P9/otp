@@ -2,29 +2,38 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
+    # tags:
+    #   - 'v*'
+    #   # Regex for a version number such as v0.2.1
+    #   - "v[0-9]+.[0-9]+.[0-9]+"
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
     - name: Set up Rust
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
         override: true
+        # components: rustfmt, clippy
+    
+    # - name: Run tests
+    #   run: cargo test
 
     - name: Build
       run: cargo build --release
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
+    - name: Upload Release Asset
+      uses: actions/upload-artifact@v3
       with:
-        files: target/release/otp
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: otp
+        path: target/release/otp
