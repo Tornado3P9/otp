@@ -3,10 +3,10 @@ name: Build and Release
 on:
   push:
     branches: [ "main" ]
-    # tags:
-    #   - 'v*'
-    #   # Regex for a version number such as v0.2.1
-    #   - "v[0-9]+.[0-9]+.[0-9]+"
+    tags:
+    - "v[0-9]+.[0-9]+.[0-9]+"
+    # Regex for a version number such as v0.2.1,
+    # or use - 'v*'
 
 env:
   CARGO_TERM_COLOR: always
