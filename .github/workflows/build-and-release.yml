@@ -4,9 +4,9 @@ on:
   push:
     branches: [ "main" ]
     tags:
-    - "v[0-9]+.[0-9]+.[0-9]+"
-    # Regex for a version number such as v0.2.1,
-    # or use - 'v*'
+      - 'v*.*.*'
+      # Regex for a version number such as 0.2.1,
+      # or use 'v*' or 'v*.*.*' or "[0-9]+.[0-9]+.[0-9]+"
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,7 +17,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v2
 
     - name: Set up Rust
       uses: actions-rs/toolchain@v1
@@ -28,16 +28,23 @@ jobs:
     - name: Build
       run: cargo build --release
 
-    # - name: Create Tag
-    #   run: |
-    #     git config user.name "GitHub Actions"
-    #     git config user.email "actions@github.com"
-    #     git tag -a v1.0.0 -m "Release v1.0.0"
-    #     git push origin v1.0.0
-
     - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: target/release/otp
+      id: create_release
+      uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./target/release/otp
+        asset_name: otp
+        asset_content_type: application/octet-stream
