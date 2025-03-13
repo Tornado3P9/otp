@@ -31,14 +31,17 @@ jobs:
     # - name: Run tests
     #   run: cargo test --verbose
 
+    - name: Debug Ref
+      run: echo "Ref: ${{ github.ref }} - Ref Name: ${{ github.ref_name }}"
+
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
         draft: false
         prerelease: false
 
@@ -51,4 +54,3 @@ jobs:
         asset_path: ./target/release/otp
         asset_name: otp
         asset_content_type: application/octet-stream
-
