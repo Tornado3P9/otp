@@ -16,24 +16,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v3
 
     - name: Set up Rust
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
         override: true
-        # components: rustfmt, clippy
-    
-    # - name: Run tests
-    #   run: cargo test
 
     - name: Build
       run: cargo build --release
 
-    - name: Upload Release Asset
-      uses: actions/upload-artifact@v3
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
       with:
-        name: otp
-        path: target/release/otp
+        files: target/release/otp
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
