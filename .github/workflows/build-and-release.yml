@@ -3,8 +3,8 @@ name: Build and Release
 on:
   push:
     branches: [ "main" ]
-  release:
-    types: [created]
+  # release:
+  #   types: [created]
 
 env:
   CARGO_TERM_COLOR: always
