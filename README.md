@@ -1,27 +1,14 @@
 # One-Time-Pad Generator (OTP)
 
-Just a fun project that encrypts or decrypts a file using One-Time-Pad (Vigenère cipher with a key that has the same length as the data that it encrypts and using the XOR bit operator instead of plaintext modulo calculation)
+Just a fun project that generates keys from passwords using different algorithms and encrypts/decrypts a file using XOR bit operation.
 
 ```
-Usage: otp -e secret.txt
-       otp -d decrypted.txt
+Usage: otp --algorithm <ALGORITHM>
 
 Options:
-  -e, --encrypt <encrypt>            Encrypt the file data (plain otp)
-      --ewp-chacha20 <ewp-chacha20>  Encrypt .. with a passphrase
-      --ewp-argon2 <ewp-argon2>      Encrypt .. with a passphrase
-      --ewp-aes256 <ewp-aes256>      Encrypt .. with a passphrase and AES-256-CBC (openssl)
-  -d, --decrypt <decrypt>            Decrypt the cipher file (plain otp)
-      --dwp-chacha20 <dwp-chacha20>  Decrypt .. with a passphrase
-      --dwp-argon2 <dwp-argon2>      Decrypt .. with a passphrase
-      --dwp-aes256 <dwp-aes256>      Decrypt .. with a passphrase and AES-256-CBC (openssl)
-  -h, --help                         Print help
-  -V, --version                      Print version
-```
-
-Dependencies for Ubuntu:  
-```bash
-sudo apt install libssl-dev
+  -a, --algorithm <ALGORITHM>  Algorithm to use for key generation
+  -h, --help                   Print help
+  -V, --version                Print version
 ```
 
 ### Further Readings:
