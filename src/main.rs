@@ -27,11 +27,38 @@ use sha2::{Digest, Sha256};
 // Argon2
 use argon2::Argon2;
 
+// #[derive(Parser, Debug)]
+// #[command(name = "otp", version = "0.2.0", author = "Tornado3P9", about = "Generates keys from passwords using different algorithms and encrypts/decrypts a file using XOR bit operation")]
+// struct Cli {
+//     #[arg(short, long, value_name = "ALGORITHM", help = "Algorithm to use for key generation")]
+//     algorithm: Algorithm,
+
+//     // #[arg(short, long, help = "Password")]
+//     // password: String,
+
+//     // #[arg(short, long, help = "Length of the key")]
+//     // length: usize,
+// }
+
 #[derive(Parser, Debug)]
-#[command(name = "otp", version = "0.2.0", author = "Tornado3P9", about = "Generates keys from passwords using different algorithms and encrypts/decrypts a file using XOR bit operation")]
+#[command(version, about = "Generates keys from passwords using different algorithms and encrypts/decrypts a file using XOR bit operation")]
 struct Cli {
-    #[arg(short, long, value_name = "ALGORITHM", help = "Algorithm to use for key generation")]
-    algorithm: Algorithm,
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Encrypt a file
+    Encrypt {
+        #[arg(short, long, value_name = "ALGORITHM", help = "Algorithm to use for key generation")]
+        algorithm: Algorithm,
+    },
+    /// Decrypt a file
+    Decrypt {
+        #[arg(short, long, value_name = "ALGORITHM", help = "Algorithm to use for key generation")]
+        algorithm: Algorithm,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -59,39 +86,70 @@ impl std::str::FromStr for Algorithm {
 fn main() {
     // TODO: implement logging instead of println
     // env_logger::init();
-    // info!("Done something successfully.");
+    // info!("Done something.");
     let args = Cli::parse();
 
-    let raw_data = read_file_to_vec("example.txt");
-    if raw_data.is_empty() {
-        eprintln!("No data to process. Exiting.");
-        std::process::exit(1);
-    }
-    println!("raw_data: {:?}", raw_data);
+    match args.command {
+        Commands::Encrypt { algorithm } => {
+            let raw_data = read_file_to_vec("example.txt");
+            if raw_data.is_empty() {
+                eprintln!("No data to process. Exiting.");
+                std::process::exit(1);
+            }
+            println!("raw_data: {:?}", raw_data);
 
-    let passphrase = match get_user_input(true) {
-        Ok(passphrase) => passphrase,
-        Err(e) => {
-            eprintln!("Error getting user input: {}", e);
-            std::process::exit(1);
+            let passphrase = match get_user_input(true) {
+                Ok(passphrase) => passphrase,
+                Err(e) => {
+                    eprintln!("Error getting user input: {}", e);
+                    std::process::exit(1);
+                }
+            };
+            println!("passphrase: {:?}", passphrase);
+
+            // If encrypt:
+            let salt_length: usize = 16; // min 16 Bytes, but <= 255 or it will require more than one Byte for pushing to the 'ciphertext' vector
+            let salt: Vec<u8> = generate_random_sequence(salt_length);
+
+            let key = generate_key(&algorithm, &passphrase, raw_data.len(), &salt);
+            println!("Generated key: {:?}", key);
+
+            let mut ciphertext: Vec<u8> = xor_operation(&raw_data, &key);
+            println!("Ciphertext: {:?}", ciphertext);
+
+            ciphertext.extend(salt); // Adding the salt to the ciphertext for writing them to a file together in a later step
+            ciphertext.push(salt_length as u8); // Cast the usize to u8 and push it to the end of the vector
+
+            write_base64_to_file("cipher.txt", &ciphertext);
         }
-    };
-    println!("passphrase: {:?}", passphrase);
+        Commands::Decrypt { algorithm } => {
+            let ciphertext = read_base64_from_file("cipher.txt");
+            if ciphertext.is_empty() {
+                eprintln!("No data to process. Exiting.");
+                std::process::exit(1);
+            }
 
-    // If encrypt:
-    let salt_length: usize = 16; // min 16 Bytes, but <= 255 or it will require more than one Byte for pushing to the 'ciphertext' vector
-    let salt: Vec<u8> = generate_random_sequence(salt_length);
+            let passphrase = match get_user_input(false) {
+                Ok(passphrase) => passphrase,
+                Err(e) => {
+                    eprintln!("Error getting user input: {}", e);
+                    std::process::exit(1);
+                }
+            };
 
-    let key = generate_key(&args.algorithm, &passphrase, raw_data.len(), &salt);
-    println!("Generated key: {:?}", key);
+            let salt_length = *ciphertext.last().unwrap() as usize;
+            let salt_start = ciphertext.len() - salt_length - 1;
+            let salt = &ciphertext[salt_start..salt_start + salt_length];
+            let encrypted_data = &ciphertext[..salt_start];
 
-    let mut ciphertext: Vec<u8> = xor_operation(&raw_data, &key);
-    println!("Ciphertext: {:?}", ciphertext);
+            let key = generate_key(&algorithm, &passphrase, encrypted_data.len(), salt);
+            let decrypted_data = xor_operation(encrypted_data, &key);
 
-    ciphertext.extend(salt); // Adding the salt to the ciphertext for writing them to a file together in a later step
-    ciphertext.push(salt_length as u8); // Cast the usize to u8 and push it to the end of the vector
+            println!("Decrypted data: {:?}", decrypted_data);
+            write_vec_to_file("decrypted.txt", &decrypted_data);
+        }
+    }
 
-    write_base64_to_file("cipher.txt", &ciphertext);
 }
 
 fn generate_key(algorithm: &Algorithm, password: &str, key_length: usize, salt: &[u8]) -> Vec<u8> {
@@ -258,5 +316,52 @@ fn write_vec_to_file(file_path: &str, data: &[u8]) {
         Err(e) => {
             eprintln!("Failed to create file: {}", e);
         }
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_random_key_length() {
+        let key_length: usize = 16;
+        let key: Vec<u8> = generate_random_sequence(key_length);
+        assert_eq!(key_length, key.len());
+    }
+
+    #[test]
+    fn test_random_key_uniqueness() {
+        let length = 10;
+        let key1 = generate_random_sequence(length);
+        let key2 = generate_random_sequence(length);
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_chacha20_algorithm() {
+        let key_1: Vec<u8> = chacha20_algorithm("private", 42);
+        let key_2: Vec<u8> = chacha20_algorithm("private", 42);
+        let key_3: Vec<u8> = chacha20_algorithm("secret", 42);
+        assert_eq!(key_1, key_2);
+        assert_ne!(key_1, key_3);
+        assert_eq!(key_1.len(), 42);
+    }
+
+    #[test]
+    fn test_argon2_algorithm() {
+        let passphrase: String = "private".to_string();
+        let salt_length: usize = 16;
+        let salt_1: Vec<u8> = generate_random_sequence(salt_length);
+        let salt_2: Vec<u8> = generate_random_sequence(salt_length);
+        let key_length: usize = 42;
+        let key_1: Vec<u8> = argon2_algorithm(&passphrase, &salt_1, key_length);
+        let key_2: Vec<u8> = argon2_algorithm(&passphrase, &salt_2, key_length);
+        let key_3: Vec<u8> = argon2_algorithm(&passphrase, &salt_1, key_length);
+        assert_ne!(key_1, key_2);
+        assert_eq!(key_1, key_3);
+        assert_eq!(key_1.len(), key_length);
     }
 }
