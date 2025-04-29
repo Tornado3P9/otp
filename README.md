@@ -1,15 +1,23 @@
-# One-Time-Pad Generator (OTP)
+# OTP
 
 Just a fun project that generates keys from passwords using different algorithms and encrypts/decrypts a file using XOR bit operation.
 
 ```
-Usage: otp --algorithm <ALGORITHM>
+Usage: otp <COMMAND>
+
+Commands:
+  encrypt  Encrypt a file
+  decrypt  Decrypt a file
+  help     Print this message or the help of the given subcommand(s)
 
 Options:
-  -a, --algorithm <ALGORITHM>  Algorithm to use for key generation
-  -h, --help                   Print help
-  -V, --version                Print version
+  -h, --help     Print help
+  -V, --version  Print version
 ```
+
+Currently available algorithms are: **Simple, ChaCha20, Argon2,**
+
+`otp encrypt --algorithm <ALGORITHM>`
 
 ### Further Readings:
 
