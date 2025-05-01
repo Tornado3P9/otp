@@ -165,6 +165,7 @@ fn main() {
 
             let encrypted_data: Vec<u8> = encrypt_file(algorithm, &passphrase, raw_data);
 
+            println!("Encrypted data: {:?}", encrypted_data);
             write_base64_to_file("cipher.txt", &encrypted_data);
         }
         Commands::Decrypt { algorithm } => {
