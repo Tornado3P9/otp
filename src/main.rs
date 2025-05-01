@@ -61,7 +61,7 @@ enum Commands {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum Algorithm {
     Simple,
     ChaCha20,
@@ -107,24 +107,30 @@ fn main() {
             };
             println!("passphrase: {:?}", passphrase);
 
-            // If encrypt:
             let salt_length: usize = 16; // min 16 Bytes, but <= 255 or it will require more than one Byte for pushing to the 'ciphertext' vector
             let salt: Vec<u8> = generate_random_sequence(salt_length);
 
-            let key = generate_key(&algorithm, &passphrase, raw_data.len(), &salt);
+            let key: Vec<u8> = match algorithm {
+                Algorithm::Simple => simple_algorithm(&passphrase, raw_data.len()),
+                Algorithm::ChaCha20 => chacha20_algorithm(&passphrase, raw_data.len()),
+                Algorithm::Argon2 => argon2_algorithm(&passphrase, &salt, raw_data.len()),
+                // Add more algorithms here
+            };
             println!("Generated key: {:?}", key);
 
             let mut ciphertext: Vec<u8> = xor_operation(&raw_data, &key);
             println!("Ciphertext: {:?}", ciphertext);
 
-            ciphertext.extend(salt); // Adding the salt to the ciphertext for writing them to a file together in a later step
-            ciphertext.push(salt_length as u8); // Cast the usize to u8 and push it to the end of the vector
+            if algorithm == Algorithm::Argon2 {
+                ciphertext.extend(salt); // Adding the salt to the ciphertext for writing them to a file together in a later step
+                ciphertext.push(salt_length as u8); // Cast the usize to u8 and push it to the end of the vector
+            }
 
             write_base64_to_file("cipher.txt", &ciphertext);
         }
         Commands::Decrypt { algorithm } => {
-            let ciphertext = read_base64_from_file("cipher.txt");
-            if ciphertext.is_empty() {
+            let encrypted_data = read_base64_from_file("cipher.txt");
+            if encrypted_data.is_empty() {
                 eprintln!("No data to process. Exiting.");
                 std::process::exit(1);
             }
@@ -137,13 +143,21 @@ fn main() {
                 }
             };
 
-            let salt_length = *ciphertext.last().unwrap() as usize;
-            let salt_start = ciphertext.len() - salt_length - 1;
-            let salt = &ciphertext[salt_start..salt_start + salt_length];
-            let encrypted_data = &ciphertext[..salt_start];
+            let mut encrypted_data_clone = encrypted_data.clone();
 
-            let key = generate_key(&algorithm, &passphrase, encrypted_data.len(), salt);
-            let decrypted_data = xor_operation(encrypted_data, &key);
+            let key: Vec<u8> = match algorithm {
+                Algorithm::Simple => simple_algorithm(&passphrase, encrypted_data_clone.len()),
+                Algorithm::ChaCha20 => chacha20_algorithm(&passphrase, encrypted_data_clone.len()),
+                Algorithm::Argon2 => {
+                    let salt_length = *encrypted_data_clone.last().unwrap() as usize;
+                    let salt_start = encrypted_data_clone.len() - salt_length - 1;
+                    let salt = &encrypted_data[salt_start..salt_start + salt_length];
+                    encrypted_data_clone = encrypted_data[..salt_start].to_vec();
+                    argon2_algorithm(&passphrase, salt, salt_start)
+                }
+                // Add more algorithms here
+            };
+            let decrypted_data = xor_operation(&encrypted_data_clone, &key);
 
             println!("Decrypted data: {:?}", decrypted_data);
             write_vec_to_file("decrypted.txt", &decrypted_data);
@@ -152,14 +166,14 @@ fn main() {
 
 }
 
-fn generate_key(algorithm: &Algorithm, password: &str, key_length: usize, salt: &[u8]) -> Vec<u8> {
-    match algorithm {
-        Algorithm::Simple => simple_algorithm(password, key_length),
-        Algorithm::ChaCha20 => chacha20_algorithm(password, key_length),
-        Algorithm::Argon2 => argon2_algorithm(password, salt, key_length),
-        // Add more algorithms here
-    }
-}
+// fn generate_key(algorithm: &Algorithm, password: &str, key_length: usize, salt: &[u8]) -> Vec<u8> {
+//     match algorithm {
+//         Algorithm::Simple => simple_algorithm(password, key_length),
+//         Algorithm::ChaCha20 => chacha20_algorithm(password, key_length),
+//         Algorithm::Argon2 => argon2_algorithm(password, salt, key_length),
+//         // Add more algorithms here
+//     }
+// }
 
 fn generate_random_sequence(length: usize) -> Vec<u8> {
     let mut key: Vec<u8> = vec![0u8; length];
