@@ -83,6 +83,62 @@ impl std::str::FromStr for Algorithm {
     }
 }
 
+// struct Ciphertext {
+//     data: Vec<u8>,
+//     salt: Option<Vec<u8>>,
+// }
+
+fn append_salt(ciphertext: &mut Vec<u8>, salt: &[u8]) {
+    ciphertext.extend(salt); // Adding the salt to the ciphertext for writing them to a file together in a later step
+    ciphertext.push(salt.len() as u8); // Cast the usize to u8 and push it to the end of the vector
+}
+
+fn extract_salt(encrypted_data: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let salt_length: usize = *encrypted_data.last().unwrap() as usize;
+    let salt_start: usize = encrypted_data.len() - salt_length - 1;
+    let salt: Vec<u8> = encrypted_data[salt_start..salt_start + salt_length].to_vec();
+    let data: Vec<u8> = encrypted_data[..salt_start].to_vec();
+    (data, salt)
+}
+
+fn encrypt_file(algorithm: Algorithm, passphrase: &str, raw_data: Vec<u8>) -> Vec<u8> {
+    let salt: Option<Vec<u8>> = if algorithm == Algorithm::Argon2 {
+        Some(generate_random_sequence(16)) // min 16 Bytes, but <= 255 or it will require more than one Byte for pushing to the 'ciphertext' vector
+    } else {
+        None
+    };
+
+    let key: Vec<u8> = match algorithm {
+        Algorithm::Simple => simple_algorithm(passphrase, raw_data.len()),
+        Algorithm::ChaCha20 => chacha20_algorithm(passphrase, raw_data.len()),
+        Algorithm::Argon2 => argon2_algorithm(passphrase, salt.as_ref().unwrap(), raw_data.len()),
+    };
+
+    let mut ciphertext: Vec<u8> = xor_operation(&raw_data, &key);
+
+    if let Some(ref salt) = salt {
+        append_salt(&mut ciphertext, salt);
+    }
+
+    ciphertext
+}
+
+fn decrypt_file(algorithm: Algorithm, passphrase: &str, encrypted_data: Vec<u8>) -> Vec<u8> {
+    let (data, salt) = if algorithm == Algorithm::Argon2 {
+        extract_salt(&encrypted_data)
+    } else {
+        (encrypted_data, vec![])
+    };
+
+    let key: Vec<u8> = match algorithm {
+        Algorithm::Simple => simple_algorithm(passphrase, data.len()),
+        Algorithm::ChaCha20 => chacha20_algorithm(passphrase, data.len()),
+        Algorithm::Argon2 => argon2_algorithm(passphrase, &salt, data.len()),
+    };
+
+    xor_operation(&data, &key)
+}
+
 fn main() {
     // TODO: implement logging instead of println
     // env_logger::init();
@@ -91,14 +147,14 @@ fn main() {
 
     match args.command {
         Commands::Encrypt { algorithm } => {
-            let raw_data = read_file_to_vec("example.txt");
+            let raw_data: Vec<u8> = read_file_to_vec("example.txt");
             if raw_data.is_empty() {
                 eprintln!("No data to process. Exiting.");
                 std::process::exit(1);
             }
             println!("raw_data: {:?}", raw_data);
 
-            let passphrase = match get_user_input(true) {
+            let passphrase: String = match get_user_input(true) {
                 Ok(passphrase) => passphrase,
                 Err(e) => {
                     eprintln!("Error getting user input: {}", e);
@@ -107,35 +163,18 @@ fn main() {
             };
             println!("passphrase: {:?}", passphrase);
 
-            let salt_length: usize = 16; // min 16 Bytes, but <= 255 or it will require more than one Byte for pushing to the 'ciphertext' vector
-            let salt: Vec<u8> = generate_random_sequence(salt_length);
+            let encrypted_data: Vec<u8> = encrypt_file(algorithm, &passphrase, raw_data);
 
-            let key: Vec<u8> = match algorithm {
-                Algorithm::Simple => simple_algorithm(&passphrase, raw_data.len()),
-                Algorithm::ChaCha20 => chacha20_algorithm(&passphrase, raw_data.len()),
-                Algorithm::Argon2 => argon2_algorithm(&passphrase, &salt, raw_data.len()),
-                // Add more algorithms here
-            };
-            println!("Generated key: {:?}", key);
-
-            let mut ciphertext: Vec<u8> = xor_operation(&raw_data, &key);
-            println!("Ciphertext: {:?}", ciphertext);
-
-            if algorithm == Algorithm::Argon2 {
-                ciphertext.extend(salt); // Adding the salt to the ciphertext for writing them to a file together in a later step
-                ciphertext.push(salt_length as u8); // Cast the usize to u8 and push it to the end of the vector
-            }
-
-            write_base64_to_file("cipher.txt", &ciphertext);
+            write_base64_to_file("cipher.txt", &encrypted_data);
         }
         Commands::Decrypt { algorithm } => {
-            let encrypted_data = read_base64_from_file("cipher.txt");
+            let encrypted_data: Vec<u8> = read_base64_from_file("cipher.txt");
             if encrypted_data.is_empty() {
                 eprintln!("No data to process. Exiting.");
                 std::process::exit(1);
             }
 
-            let passphrase = match get_user_input(false) {
+            let passphrase: String = match get_user_input(false) {
                 Ok(passphrase) => passphrase,
                 Err(e) => {
                     eprintln!("Error getting user input: {}", e);
@@ -143,37 +182,13 @@ fn main() {
                 }
             };
 
-            let mut encrypted_data_clone = encrypted_data.clone();
-
-            let key: Vec<u8> = match algorithm {
-                Algorithm::Simple => simple_algorithm(&passphrase, encrypted_data_clone.len()),
-                Algorithm::ChaCha20 => chacha20_algorithm(&passphrase, encrypted_data_clone.len()),
-                Algorithm::Argon2 => {
-                    let salt_length = *encrypted_data_clone.last().unwrap() as usize;
-                    let salt_start = encrypted_data_clone.len() - salt_length - 1;
-                    let salt = &encrypted_data[salt_start..salt_start + salt_length];
-                    encrypted_data_clone = encrypted_data[..salt_start].to_vec();
-                    argon2_algorithm(&passphrase, salt, salt_start)
-                }
-                // Add more algorithms here
-            };
-            let decrypted_data = xor_operation(&encrypted_data_clone, &key);
+            let decrypted_data: Vec<u8> = decrypt_file(algorithm, &passphrase, encrypted_data);
 
             println!("Decrypted data: {:?}", decrypted_data);
             write_vec_to_file("decrypted.txt", &decrypted_data);
         }
     }
-
 }
-
-// fn generate_key(algorithm: &Algorithm, password: &str, key_length: usize, salt: &[u8]) -> Vec<u8> {
-//     match algorithm {
-//         Algorithm::Simple => simple_algorithm(password, key_length),
-//         Algorithm::ChaCha20 => chacha20_algorithm(password, key_length),
-//         Algorithm::Argon2 => argon2_algorithm(password, salt, key_length),
-//         // Add more algorithms here
-//     }
-// }
 
 fn generate_random_sequence(length: usize) -> Vec<u8> {
     let mut key: Vec<u8> = vec![0u8; length];
@@ -195,17 +210,17 @@ fn chacha20_algorithm(password: &str, key_length: usize) -> Vec<u8> {
     let seed_bytes: [u8; 32] = hash_result.into();
 
     // Create a ChaCha RNG with the seed
-    let mut rng = ChaCha20Rng::from_seed(seed_bytes);
+    let mut rng: ChaCha20Rng = ChaCha20Rng::from_seed(seed_bytes);
 
     // Fill a Vec<u8> with random bytes
-    let mut key = vec![0u8; key_length];
+    let mut key: Vec<u8> = vec![0u8; key_length];
     rng.fill_bytes(&mut key);
 
     key
 }
 
 fn argon2_algorithm(password: &str, salt: &[u8], key_length: usize) -> Vec<u8> {
-    let mut key = vec![0u8; key_length];
+    let mut key: Vec<u8> = vec![0u8; key_length];
     if let Err(e) = Argon2::default().hash_password_into(password.as_bytes(), salt, &mut key) {
         eprintln!("An error occurred with argon2: {}", e);
         std::process::exit(1);
@@ -227,7 +242,7 @@ fn get_user_input(confirm: bool) -> Result<String, String> {
             return Err(format!("Failed to flush stdout: {}", e));
         }
 
-        let user_input = match read_password() {
+        let user_input: String = match read_password() {
             Ok(input) => input,
             Err(e) => return Err(format!("Failed to read password: {}", e)),
         };
@@ -245,7 +260,7 @@ fn get_user_input(confirm: bool) -> Result<String, String> {
                 return Err(format!("Failed to flush stdout: {}", e));
             }
 
-            let confirm_input = match read_password() {
+            let confirm_input: String = match read_password() {
                 Ok(input) => input,
                 Err(e) => return Err(format!("Failed to read password: {}", e)),
             };
@@ -261,14 +276,8 @@ fn get_user_input(confirm: bool) -> Result<String, String> {
     }
 }
 
-// fn read_file_to_vec(file_path: &str) -> Result<Vec<u8>, io::Error> {
-//     let mut file = File::open(file_path)?;
-//     let mut buffer = Vec::new();
-//     file.read_to_end(&mut buffer)?;
-//     Ok(buffer)
-// }
 fn read_file_to_vec(file_path: &str) -> Vec<u8> {
-    let mut file = match File::open(file_path) {
+    let mut file: File = match File::open(file_path) {
         Ok(file) => file,
         Err(e) => {
             eprintln!("Failed to open file: {}", e);
@@ -276,7 +285,7 @@ fn read_file_to_vec(file_path: &str) -> Vec<u8> {
         }
     };
 
-    let mut buffer = Vec::new();
+    let mut buffer: Vec<u8> = Vec::new();
     if let Err(e) = file.read_to_end(&mut buffer) {
         eprintln!("Failed to read file: {}", e);
         return Vec::new();
@@ -290,7 +299,7 @@ fn read_file_to_vec(file_path: &str) -> Vec<u8> {
 }
 
 fn write_base64_to_file(file_path: &str, data: &[u8]) {
-    let base64_data = BASE64_STANDARD.encode(data);
+    let base64_data: String = BASE64_STANDARD.encode(data);
 
     match File::create(file_path) {
         Ok(mut file) => {
