@@ -17,7 +17,7 @@ Options:
 
 Currently available algorithms are: **Simple, ChaCha20, Argon2,**
 
-`otp encrypt --algorithm <ALGORITHM>`
+`otp encrypt --algorithm <ALGORITHM> --file-path <FILE_PATH>`
 
 ### Further Readings:
 
