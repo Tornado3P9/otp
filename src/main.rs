@@ -53,11 +53,15 @@ enum Commands {
     Encrypt {
         #[arg(short, long, value_name = "ALGORITHM", help = "Algorithm to use for key generation")]
         algorithm: Algorithm,
+        #[arg(short, long, value_name = "FILE_PATH", help = "Path to the file to encrypt")]
+        file_path: String,
     },
     /// Decrypt a file
     Decrypt {
         #[arg(short, long, value_name = "ALGORITHM", help = "Algorithm to use for key generation")]
         algorithm: Algorithm,
+        #[arg(short, long, value_name = "FILE_PATH", help = "Path to the file to decrypt")]
+        file_path: String,
     },
 }
 
@@ -143,11 +147,12 @@ fn main() {
     // TODO: implement logging instead of println
     // env_logger::init();
     // info!("Done something.");
+    // TODO: also save the file name and extension to the ciphertext to recreate the correct file when decrypting
     let args = Cli::parse();
 
     match args.command {
-        Commands::Encrypt { algorithm } => {
-            let raw_data: Vec<u8> = read_file_to_vec("example.txt");
+        Commands::Encrypt { algorithm, file_path } => {
+            let raw_data: Vec<u8> = read_file_to_vec(&file_path);
             if raw_data.is_empty() {
                 eprintln!("No data to process. Exiting.");
                 std::process::exit(1);
@@ -168,8 +173,8 @@ fn main() {
             println!("Encrypted data: {:?}", encrypted_data);
             write_base64_to_file("cipher.txt", &encrypted_data);
         }
-        Commands::Decrypt { algorithm } => {
-            let encrypted_data: Vec<u8> = read_base64_from_file("cipher.txt");
+        Commands::Decrypt { algorithm, file_path } => {
+            let encrypted_data: Vec<u8> = read_base64_from_file(&file_path);
             if encrypted_data.is_empty() {
                 eprintln!("No data to process. Exiting.");
                 std::process::exit(1);
@@ -376,16 +381,17 @@ mod tests {
 
     #[test]
     fn test_argon2_algorithm() {
-        let passphrase: String = "private".to_string();
         let salt_length: usize = 16;
         let salt_1: Vec<u8> = generate_random_sequence(salt_length);
         let salt_2: Vec<u8> = generate_random_sequence(salt_length);
         let key_length: usize = 42;
-        let key_1: Vec<u8> = argon2_algorithm(&passphrase, &salt_1, key_length);
-        let key_2: Vec<u8> = argon2_algorithm(&passphrase, &salt_2, key_length);
-        let key_3: Vec<u8> = argon2_algorithm(&passphrase, &salt_1, key_length);
+        let key_1: Vec<u8> = argon2_algorithm("private", &salt_1, key_length);
+        let key_2: Vec<u8> = argon2_algorithm("private", &salt_2, key_length);
+        let key_3: Vec<u8> = argon2_algorithm("private", &salt_1, key_length);
+        let key_4: Vec<u8> = argon2_algorithm("secret", &salt_1, key_length);
         assert_ne!(key_1, key_2);
         assert_eq!(key_1, key_3);
         assert_eq!(key_1.len(), key_length);
+        assert_ne!(key_1, key_4);
     }
 }
