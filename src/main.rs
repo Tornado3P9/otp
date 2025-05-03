@@ -1,10 +1,8 @@
-// Logging
-// use log::{info, error};
-
+// Managing Files
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 
-// read user input
+// Read user input
 use rpassword::read_password;
 
 // Encode Base64
@@ -87,6 +85,67 @@ impl std::str::FromStr for Algorithm {
     }
 }
 
+macro_rules! debug {
+    ($condition:expr, $($arg:tt)*) => {
+        if $condition {
+            println!($($arg)*);
+        }
+    };
+}
+
+fn main() {
+    // TODO: maybe save the file name and extension to the ciphertext to recreate the correct file when decrypting
+    let args = Cli::parse();
+
+    // For custom println! macro with condition
+    let debug_mode: bool = false;
+
+    match args.command {
+        Commands::Encrypt { algorithm, file_path } => {
+            let raw_data: Vec<u8> = read_file_to_vec(&file_path);
+            if raw_data.is_empty() {
+                eprintln!("No data to process. Exiting.");
+                std::process::exit(1);
+            }
+            debug!(debug_mode, "raw_data: {:?}", raw_data);
+
+            let passphrase: String = match get_user_input(true) {
+                Ok(passphrase) => passphrase,
+                Err(e) => {
+                    eprintln!("Error getting user input: {}", e);
+                    std::process::exit(1);
+                }
+            };
+            debug!(debug_mode, "passphrase: {:?}", passphrase);
+
+            let encrypted_data: Vec<u8> = encrypt_file(algorithm, &passphrase, raw_data);
+
+            debug!(debug_mode, "Encrypted data: {:?}", encrypted_data);
+            write_base64_to_file("cipher.txt", &encrypted_data);
+        }
+        Commands::Decrypt { algorithm, file_path } => {
+            let encrypted_data: Vec<u8> = read_base64_from_file(&file_path);
+            if encrypted_data.is_empty() {
+                eprintln!("No data to process. Exiting.");
+                std::process::exit(1);
+            }
+
+            let passphrase: String = match get_user_input(false) {
+                Ok(passphrase) => passphrase,
+                Err(e) => {
+                    eprintln!("Error getting user input: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+            let decrypted_data: Vec<u8> = decrypt_file(algorithm, &passphrase, encrypted_data);
+
+            debug!(debug_mode, "Decrypted data: {:?}", decrypted_data);
+            write_vec_to_file("decrypted.txt", &decrypted_data);
+        }
+    }
+}
+
 // struct Ciphertext {
 //     data: Vec<u8>,
 //     salt: Option<Vec<u8>>,
@@ -141,59 +200,6 @@ fn decrypt_file(algorithm: Algorithm, passphrase: &str, encrypted_data: Vec<u8>)
     };
 
     xor_operation(&data, &key)
-}
-
-fn main() {
-    // TODO: implement logging instead of println
-    // env_logger::init();
-    // info!("Done something.");
-    // TODO: also save the file name and extension to the ciphertext to recreate the correct file when decrypting
-    let args = Cli::parse();
-
-    match args.command {
-        Commands::Encrypt { algorithm, file_path } => {
-            let raw_data: Vec<u8> = read_file_to_vec(&file_path);
-            if raw_data.is_empty() {
-                eprintln!("No data to process. Exiting.");
-                std::process::exit(1);
-            }
-            println!("raw_data: {:?}", raw_data);
-
-            let passphrase: String = match get_user_input(true) {
-                Ok(passphrase) => passphrase,
-                Err(e) => {
-                    eprintln!("Error getting user input: {}", e);
-                    std::process::exit(1);
-                }
-            };
-            println!("passphrase: {:?}", passphrase);
-
-            let encrypted_data: Vec<u8> = encrypt_file(algorithm, &passphrase, raw_data);
-
-            println!("Encrypted data: {:?}", encrypted_data);
-            write_base64_to_file("cipher.txt", &encrypted_data);
-        }
-        Commands::Decrypt { algorithm, file_path } => {
-            let encrypted_data: Vec<u8> = read_base64_from_file(&file_path);
-            if encrypted_data.is_empty() {
-                eprintln!("No data to process. Exiting.");
-                std::process::exit(1);
-            }
-
-            let passphrase: String = match get_user_input(false) {
-                Ok(passphrase) => passphrase,
-                Err(e) => {
-                    eprintln!("Error getting user input: {}", e);
-                    std::process::exit(1);
-                }
-            };
-
-            let decrypted_data: Vec<u8> = decrypt_file(algorithm, &passphrase, encrypted_data);
-
-            println!("Decrypted data: {:?}", decrypted_data);
-            write_vec_to_file("decrypted.txt", &decrypted_data);
-        }
-    }
 }
 
 fn generate_random_sequence(length: usize) -> Vec<u8> {
@@ -347,7 +353,6 @@ fn write_vec_to_file(file_path: &str, data: &[u8]) {
         }
     }
 }
-
 
 
 #[cfg(test)]
