@@ -53,6 +53,8 @@ enum Commands {
         algorithm: Algorithm,
         #[arg(short, long, value_name = "FILE_PATH", help = "Path to the file to encrypt")]
         file_path: String,
+        #[arg(short, long, value_name = "OUTPUTFILE", help = "Optional path to the output file", default_value = "cipher.txt")]
+        outputfile: String,
     },
     /// Decrypt a file
     Decrypt {
@@ -60,6 +62,8 @@ enum Commands {
         algorithm: Algorithm,
         #[arg(short, long, value_name = "FILE_PATH", help = "Path to the file to decrypt")]
         file_path: String,
+        #[arg(short, long, value_name = "OUTPUTFILE", help = "Optional path to the output file", default_value = "decrypted.txt")]
+        outputfile: String,
     },
 }
 
@@ -101,7 +105,7 @@ fn main() {
     let debug_mode: bool = false;
 
     match args.command {
-        Commands::Encrypt { algorithm, file_path } => {
+        Commands::Encrypt { algorithm, file_path, outputfile } => {
             let raw_data: Vec<u8> = read_file_to_vec(&file_path);
             if raw_data.is_empty() {
                 eprintln!("No data to process. Exiting.");
@@ -121,9 +125,9 @@ fn main() {
             let encrypted_data: Vec<u8> = encrypt_file(algorithm, &passphrase, raw_data);
 
             debug!(debug_mode, "Encrypted data: {:?}", encrypted_data);
-            write_base64_to_file("cipher.txt", &encrypted_data);
+            write_base64_to_file(&outputfile, &encrypted_data);
         }
-        Commands::Decrypt { algorithm, file_path } => {
+        Commands::Decrypt { algorithm, file_path, outputfile } => {
             let encrypted_data: Vec<u8> = read_base64_from_file(&file_path);
             if encrypted_data.is_empty() {
                 eprintln!("No data to process. Exiting.");
@@ -141,7 +145,7 @@ fn main() {
             let decrypted_data: Vec<u8> = decrypt_file(algorithm, &passphrase, encrypted_data);
 
             debug!(debug_mode, "Decrypted data: {:?}", decrypted_data);
-            write_vec_to_file("decrypted.txt", &decrypted_data);
+            write_vec_to_file(&outputfile, &decrypted_data);
         }
     }
 }
